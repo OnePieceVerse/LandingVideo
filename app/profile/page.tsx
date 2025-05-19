@@ -2,6 +2,10 @@
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { format } from "date-fns"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabase"
+import { Button } from "@/components/ui/button"
 
 const videos = [
   {
@@ -40,11 +44,77 @@ const images = [
 ]
 
 export default function ProfilePage() {
+  const router = useRouter()
+  const [user, setUser] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function getUser() {
+      try {
+        setLoading(true)
+        
+        // Check if user is logged in with Supabase
+        const { data: { user } } = await supabase.auth.getUser()
+        
+        if (!user) {
+          // Redirect to login page if not logged in
+          router.push("/login")
+          return
+        }
+        
+        setUser(user)
+      } catch (error) {
+        console.error('Error getting user:', error)
+        router.push("/login")
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    getUser()
+  }, [router])
+  
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut()
+      router.push("/login")
+    } catch (error) {
+      console.error('Error signing out:', error)
+    }
+  }
+  
+  if (loading) {
+    return (
+      <div className="flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        <p className="mt-4 text-muted-foreground">Loading profile...</p>
+      </div>
+    )
+  }
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)] flex-col">
       <main className="flex-1">
         <div className="container mx-auto px-4 md:px-6 py-6">
           <div className="mx-auto max-w-7xl">
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-3xl font-bold tracking-tight">My Profile</h1>
+              <Button variant="outline" onClick={handleSignOut}>Sign Out</Button>
+            </div>
+            
+            {user && (
+              <div className="mb-8 p-4 border rounded-lg">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                    {user.email ? user.email[0].toUpperCase() : '?'}
+                  </div>
+                  <div>
+                    <h2 className="font-medium">{user.email || user.id}</h2>
+                    <p className="text-sm text-muted-foreground">Joined via {user.app_metadata?.provider || 'Supabase'}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div className="space-y-8">
               <div>
                 <h2 className="text-2xl font-bold tracking-tight">My Works</h2>
