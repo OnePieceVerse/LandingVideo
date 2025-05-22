@@ -38,7 +38,7 @@ export default function Home() {
                   <div className="space-y-6">
                     <h1 className="text-3xl font-bold tracking-tighter sm:text-3xl xl:text-5xl/none">
                       Transform <span className="px-2 text-primary text-white bg-purple-600"> Landing Page </span>
-                      <br />
+                      <div className="h-2.5"></div>
                       to <span className="px-2 text-primary text-white bg-orange-600"> Short Video </span>
                     </h1>
                     <p className="max-w-[600px] text-gray-500 md:text-xl dark:text-gray-400">

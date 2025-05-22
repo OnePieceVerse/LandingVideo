@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
@@ -19,25 +16,34 @@ export async function POST(request: Request) {
       );
     }
 
-    // Log the crawl request to Supabase (optional)
-    await supabase.from('crawl_requests').insert({
-      url,
-      status: 'processing',
-    });
+    // Forward the request to the third-party service
+    // const apiResponse = await fetch('https://api.landingvideo.com/v1/crawl', {
+    //   method: 'POST',
+    //   headers: {
+    //     'Content-Type': 'application/json',
+    //     'Authorization': `Bearer ${process.env.LANDINGVIDEO_API_KEY || ''}`, // Using server environment variable for API key
+    //   },
+    //   body: JSON.stringify({ url }),
+    // });
 
-    // In a real application, you would:
-    // 1. Fetch the content from the URL
-    // 2. Parse the HTML
-    // 3. Extract relevant content
-    // 4. Process it for video generation
+    // if (!apiResponse.ok) {
+    //   throw new Error(`Third-party API error: ${apiResponse.status}`);
+    // }
 
-    // For this example, we'll simulate the crawl with a delay
-    // and return some mock data
-    
-    // Simulate processing delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // const apiData = await apiResponse.json();
 
-    // Mock response data
+    // // If we have real data from the API, use it
+    // if (apiData && apiData.paragraphs) {
+    //   // Return the API response
+    //   return NextResponse.json({
+    //     success: true,
+    //     message: 'Landing page crawled successfully',
+    //     url,
+    //     paragraphs: apiData.paragraphs,
+    //   });
+    // }
+
+    // Fallback to mock data if the API doesn't return paragraphs
     const mockParagraphs = [
       {
         id: 1,
@@ -64,11 +70,6 @@ export async function POST(request: Request) {
       }
     ];
 
-    // Update the crawl request status in Supabase (optional)
-    await supabase.from('crawl_requests').update({
-      status: 'completed',
-    }).eq('url', url);
-
     // Return the response
     return NextResponse.json({
       success: true,
@@ -78,11 +79,11 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Error crawling URL:', error);
-    
+
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Failed to crawl URL' 
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to crawl URL'
       },
       { status: 500 }
     );

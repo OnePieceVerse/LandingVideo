@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { useState, useRef, useEffect } from "react"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
@@ -13,37 +15,34 @@ export default function GeneratePage() {
   const [url, setUrl] = useState("")
   const [logs, setLogs] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
-  const [previewAsset, setPreviewAsset] = useState<{type: 'image' | 'video', url: string} | null>(null)
+  const [previewAsset, setPreviewAsset] = useState<{type: 'image' | 'video' | 'gif', url: string} | null>(null)
   const [paragraphs, setParagraphs] = useState<Array<{id: number, content: string, assets: Array<{type: 'image' | 'video' | 'gif', url: string}>}>>([
     {
       id: 1,
       content: "",
-      assets: [
-        { type: 'image', url: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?q=80&w=1000' },
-        { type: 'video', url: 'https://static.videezy.com/system/resources/previews/000/005/529/original/Reaviling_Sjusj%C3%B8en_Ski_Senter.mp4' },
-        { type: 'gif', url: 'https://media.giphy.com/media/3o7aCQ15bV5yZJN0GQ/giphy.gif' }
-      ]
-    },
-    {
-      id: 2,
-      content: "",
-      assets: [
-        { type: 'image', url: 'https://images.unsplash.com/photo-1531297484001-80022131f5a1?q=80&w=1000' },
-        { type: 'image', url: 'https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?q=80&w=1000' },
-        { type: 'video', url: 'https://static.videezy.com/system/resources/previews/000/002/231/original/5226496.mp4' }
-      ]
-    },
-    {
-      id: 3,
-      content: "",
-      assets: [
-        { type: 'image', url: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?q=80&w=1000' }
-      ]
+      assets: []
     }
   ])
+  const [showAssetsDialog, setShowAssetsDialog] = useState(false)
+  const [currentParagraphId, setCurrentParagraphId] = useState<number | null>(null)
+  const fileInputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const [crawlSuccessful, setCrawlSuccessful] = useState(false)
 
-  // Create refs for file inputs
-  const fileInputRefs = useRef<Array<HTMLInputElement | null>>([null, null, null])
+  // Mock assets for the dialog
+  const mockAssets = [
+    { id: 1, type: 'image', url: 'https://via.placeholder.com/300x200', name: '穿越火线:枪战王者4529.jpg' },
+    { id: 2, type: 'image', url: 'https://via.placeholder.com/300x200', name: '穿越火线:枪战王者2089.jpg' },
+    { id: 3, type: 'image', url: 'https://via.placeholder.com/300x200', name: '穿越火线:枪战王者7327.jpeg' },
+    { id: 4, type: 'video', url: 'https://via.placeholder.com/300x200', name: 'MagStand Magnetic Phone Holder.mp4', duration: '01:16' },
+    { id: 5, type: 'video', url: 'https://via.placeholder.com/300x200', name: 'MagStand Magnetic Phone Holder.mp4', duration: '00:09' },
+    { id: 6, type: 'video', url: 'https://via.placeholder.com/300x200', name: 'MagStand Magnetic Phone Holder.mp4', duration: '00:10' },
+    { id: 7, type: 'image', url: 'https://via.placeholder.com/300x200', name: 'MagStand Magnetic Phone Holder.jpg' },
+    { id: 8, type: 'image', url: 'https://via.placeholder.com/300x200', name: 'MagStand Magnetic Phone Holder.jpg' },
+    { id: 9, type: 'image', url: 'https://via.placeholder.com/300x200', name: 'Product Image 1.jpg' },
+    { id: 10, type: 'image', url: 'https://via.placeholder.com/300x200', name: 'Product Image 2.jpg' },
+    { id: 11, type: 'image', url: 'https://via.placeholder.com/300x200', name: 'Product Image 3.jpg' },
+    { id: 12, type: 'image', url: 'https://via.placeholder.com/300x200', name: 'Product Image 4.jpg' }
+  ];
 
   const handleCrawl = async () => {
     // Check if user is logged in
@@ -66,12 +65,11 @@ export default function GeneratePage() {
     setLogs(["Crawling landing page content..."])
 
     try {
-      // Make API call to third-party backend service
-      const response = await fetch('https://api.landingvideo.com/v1/crawl', {
+      // Make API call to local API route instead of third-party service
+      const response = await fetch('/api/crawl', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_LANDINGVIDEO_API_KEY || ''}`, // Using environment variable for API key - add to .env.local
         },
         body: JSON.stringify({ url }),
       })
@@ -91,10 +89,12 @@ export default function GeneratePage() {
       // If the API returns paragraph content, update the paragraphs state
       if (data.paragraphs) {
         setParagraphs(data.paragraphs)
+        setCrawlSuccessful(true)
       }
     } catch (error) {
       console.error('Crawl error:', error)
       setLogs(prev => [...prev, `Error: ${error instanceof Error ? error.message : 'Failed to crawl URL'}`])
+      setCrawlSuccessful(false)
     } finally {
       setLoading(false)
     }
@@ -112,24 +112,41 @@ export default function GeneratePage() {
     setParagraphs(prev => prev.map(p => p.id === id ? { ...p, content } : p))
   }
 
-  const handleFileUpload = (sceneId: number, fileType: 'image' | 'video', file: File) => {
-    // In a real app, you would upload the file to a server and get a URL back
-    // For this demo, we'll create a local object URL
-    const url = URL.createObjectURL(file)
+  const handleFileUpload = async (paragraphId: number, fileType: 'image' | 'video', file: File) => {
+    // Create a temporary URL for preview
+    const url = URL.createObjectURL(file);
 
-    setParagraphs(prev => prev.map(p => {
-      if (p.id === sceneId) {
-        return {
-          ...p,
-          assets: [...p.assets, { type: fileType, url }]
+    // Add the asset to the paragraph
+    setParagraphs(prevParagraphs => {
+      return prevParagraphs.map(p => {
+        if (p.id === paragraphId) {
+          return {
+            ...p,
+            assets: [...p.assets, { type: fileType, url }]
+          };
         }
-      }
-      return p
-    }))
+        return p;
+      });
+    });
+  };
 
-    // Add a log message
-    setLogs(prev => [...prev, `${fileType} uploaded for scene ${sceneId}: ${file.name}`])
-  }
+  // Function to handle asset selection from the dialog
+  const handleAssetSelect = (asset: any) => {
+    if (currentParagraphId) {
+      setParagraphs(prevParagraphs => {
+        return prevParagraphs.map(p => {
+          if (p.id === currentParagraphId) {
+            return {
+              ...p,
+              assets: [...p.assets, { type: asset.type, url: asset.url }]
+            };
+          }
+          return p;
+        });
+      });
+    }
+    setShowAssetsDialog(false);
+  };
 
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)] flex-col">
@@ -141,7 +158,7 @@ export default function GeneratePage() {
                 {/* Step 1: Landing Page URL */}
                 <div className="border rounded-lg p-6">
                   <div className="flex items-center mb-4">
-                    <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center mr-3 font-semibold">1</div>
+                    <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center mr-3 font-semibold dark:text-slate-900">1</div>
                     <h2 className="text-xl font-semibold">Step 1: Crawl Landing Page Content</h2>
                   </div>
                   <div className="flex space-x-2">
@@ -157,195 +174,330 @@ export default function GeneratePage() {
                   </div>
                 </div>
 
-                {/* Step 2: Landing Page Content */}
-                <div className="border rounded-lg p-6">
+                {/* Step 2: Landing Page Content - Only shown after successful crawl */}
+                {crawlSuccessful && <div className="border rounded-lg p-6">
                   <div className="flex items-center mb-4">
-                    <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center mr-3 font-semibold">2</div>
+                    <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center mr-3 font-semibold dark:text-slate-900">2</div>
                     <h2 className="text-xl font-semibold">Step 2: Edit Landing Page Content</h2>
                   </div>
                   <div className="space-y-6">
                     {paragraphs.map((paragraph) => (
-                      <div key={paragraph.id} className="border rounded-lg overflow-hidden">
-                        <div className="bg-muted/30 px-4 py-2 flex items-center justify-between border-b">
-                          <h3 className="font-medium">Scene {paragraph.id}</h3>
-                          <div className="flex space-x-2">
-                            {/* Video icon button removed */}
+                      <div key={paragraph.id} className="border rounded-lg overflow-hidden shadow-sm bg-white dark:bg-slate-900">
+                        <div className="bg-muted/30 px-4 py-3 flex items-center justify-between border-b">
+                          <div className="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
+                              <path d="m22 8-6 4 6 4V8Z"/>
+                              <rect width="14" height="12" x="2" y="6" rx="2" ry="2"/>
+                            </svg>
+                            <h3 className="font-medium">Scene {paragraph.id}</h3>
                           </div>
+                          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="1"/>
+                              <circle cx="19" cy="12" r="1"/>
+                              <circle cx="5" cy="12" r="1"/>
+                            </svg>
+                          </Button>
                         </div>
-                        <div className="p-4 flex flex-col md:flex-row gap-4">
+                        <div className="p-4 flex flex-col md:flex-row gap-6">
                           <div className="w-full md:w-1/2">
-                            <div className="mb-2">
-                              <h4 className="text-sm font-medium text-muted-foreground">Script</h4>
+                            <div className="mb-3">
+                              <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                                  <polyline points="14 2 14 8 20 8"/>
+                                  <line x1="16" x2="22" y1="5" y2="5"/>
+                                  <line x1="19" x2="19" y1="2" y2="8"/>
+                                  <circle cx="9" cy="9" r="2"/>
+                                  <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+                                </svg>
+                                Script
+                              </h4>
                             </div>
                             <Textarea
-                              placeholder={`scene ${paragraph.id} scripts.....`}
+                              placeholder={`Describe scene ${paragraph.id} here...`}
                               value={paragraph.content}
                               onChange={(e) => updateParagraph(paragraph.id, e.target.value)}
-                              className="min-h-[120px] resize-none"
+                              className="min-h-[150px] resize-none border-slate-200 dark:border-slate-700 focus-visible:ring-primary"
                             />
                           </div>
                           <div className="w-full md:w-1/2">
-                            <div className="mb-2">
-                              <h4 className="text-sm font-medium text-muted-foreground">Assets</h4>
+                            <div className="mb-3">
+                              <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+                                  <circle cx="9" cy="9" r="2"/>
+                                  <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+                                </svg>
+                                Assets ({paragraph.assets.length})
+                              </h4>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 max-h-[300px] overflow-y-auto p-1">
-                              {paragraph.assets.length > 0 ? (
-                                paragraph.assets.map((asset, index) => (
-                                  <div
-                                    key={index}
-                                    className="aspect-square bg-muted rounded-md overflow-hidden relative group cursor-pointer"
-                                    onClick={() => setPreviewAsset(asset)}
-                                  >
-                                    {asset.type === 'image' ? (
-                                      <img src={asset.url} alt={`Scene ${paragraph.id} asset ${index}`} className="w-full h-full object-cover" />
-                                    ) : (
-                                      <video src={asset.url} className="w-full h-full object-cover" />
-                                    )}
+
+                            {/* Media preview section */}
+                            <div className="border rounded-lg p-3 bg-slate-50 dark:bg-slate-800/50">
+                              <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-6 gap-3 max-h-[220px] overflow-y-auto pb-1">
+                                {paragraph.assets.length > 0 ? (
+                                  paragraph.assets.map((asset, index) => (
                                     <div
-                                      className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                                      onClick={(e) => {
-                                        e.stopPropagation(); // Prevent opening preview when clicking delete
-                                        setParagraphs(prev => prev.map(p => {
-                                          if (p.id === paragraph.id) {
-                                            return {
-                                              ...p,
-                                              assets: p.assets.filter((_, i) => i !== index)
-                                            }
-                                          }
-                                          return p
-                                        }));
-                                      }}
+                                      key={index}
+                                      className="aspect-square bg-white dark:bg-slate-700 rounded-md overflow-hidden relative group cursor-pointer shadow-sm border border-slate-200 dark:border-slate-600"
+                                      onClick={() => setPreviewAsset(asset)}
                                     >
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6 rounded-full bg-black/60 text-white hover:text-white hover:bg-red-500/90"
+                                      {asset.type === 'image' ? (
+                                        <img src={asset.url} alt={`Scene ${paragraph.id} asset ${index}`} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <video src={asset.url} className="w-full h-full object-cover" />
+                                      )}
+                                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-200"></div>
+                                      <div
+                                        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                        onClick={(e) => {
+                                          e.stopPropagation(); // Prevent opening preview when clicking delete
+                                          setParagraphs(prev => prev.map(p => {
+                                            if (p.id === paragraph.id) {
+                                              return {
+                                                ...p,
+                                                assets: p.assets.filter((_, i) => i !== index)
+                                              }
+                                            }
+                                            return p
+                                          }));
+                                        }}
                                       >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
-                                          <path d="M18 6 6 18"></path>
-                                          <path d="m6 6 12 12"></path>
-                                        </svg>
-                                      </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6 rounded-full bg-black/60 text-white hover:text-white hover:bg-red-500/90"
+                                        >
+                                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
+                                            <path d="M18 6 6 18"></path>
+                                            <path d="m6 6 12 12"></path>
+                                          </svg>
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="min-h-[150px] bg-white dark:bg-slate-700/50 rounded-md flex flex-col items-center justify-center col-span-full border border-dashed border-slate-200 dark:border-slate-600">
+                                    <div className="text-center p-4">
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50">
+                                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7" />
+                                        <rect width="13" height="9" x="3" y="5" rx="2"/>
+                                        <path d="m16 5 3 3-3 3"/>
+                                      </svg>
+                                      <p className="text-sm text-muted-foreground">No media assets yet</p>
+                                      <p className="text-xs text-muted-foreground/70 mt-1">Upload images or videos for this scene</p>
                                     </div>
                                   </div>
-                                ))
-                              ) : (
-                                <div className="aspect-square bg-muted rounded-md flex items-center justify-center col-span-full">
-                                  <p className="text-sm text-muted-foreground">No assets yet. Click the button below to add.</p>
+                                )}
+                              </div>
+
+                              <div className="mt-2 mb-2 flex justify-between items-center">
+                                <p className="text-xs text-muted-foreground">Supported: JPG, JPEG, PNG, GIF, WAV, MP4</p>
+                                <div className="flex space-x-2">
+                                  <input
+                                    type="file"
+                                    accept="image/*,video/*"
+                                    ref={el => fileInputRefs.current[paragraph.id - 1] = el}
+                                    onChange={(e) => {
+                                      if (e.target.files && e.target.files[0]) {
+                                        const file = e.target.files[0];
+                                        const fileType = file.type.startsWith('image/') ? 'image' : 'video';
+                                        handleFileUpload(paragraph.id, fileType, file);
+                                        e.target.value = ''; // Reset the input
+                                      }
+                                    }}
+                                    className="hidden"
+                                  />
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="flex items-center space-x-1 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700"
+                                      >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                                          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7" />
+                                          <line x1="16" x2="22" y1="5" y2="5" />
+                                          <line x1="19" x2="19" y1="2" y2="8" />
+                                          <circle cx="9" cy="9" r="2" />
+                                          <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                                        </svg>
+                                        <span>Upload Assets</span>
+                                      </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-54 p-0" align="start">
+                                      <div className="py-2">
+                                        <button
+                                          onClick={() => fileInputRefs.current[paragraph.id - 1]?.click()}
+                                          className="flex items-center gap-3 w-full px-4 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                                        >
+                                          <div className="flex items-center justify-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                              <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+                                              <circle cx="9" cy="9" r="2"/>
+                                              <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+                                            </svg>
+                                          </div>
+                                          Upload from device
+                                        </button>
+                                        <button
+                                          className="flex items-center gap-3 w-full px-4 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                                          onClick={() => {
+                                            setCurrentParagraphId(paragraph.id);
+                                            setShowAssetsDialog(true);
+                                          }}
+                                        >
+                                          <div className="flex items-center justify-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                              <polyline points="17 8 12 3 7 8" />
+                                              <line x1="12" y1="3" x2="12" y2="15" />
+                                            </svg>
+                                          </div>
+                                          Choose from Assets
+                                        </button>
+                                      </div>
+                                    </PopoverContent>
+                                  </Popover>
                                 </div>
-                              )}
-                            </div>
-                            <div className="mt-4 flex space-x-2">
-                              <input
-                                type="file"
-                                accept="image/*,video/*"
-                                ref={el => fileInputRefs.current[paragraph.id - 1] = el}
-                                onChange={(e) => {
-                                  if (e.target.files && e.target.files[0]) {
-                                    const file = e.target.files[0];
-                                    const fileType = file.type.startsWith('image/') ? 'image' : 'video';
-                                    handleFileUpload(paragraph.id, fileType, file);
-                                    e.target.value = ''; // Reset the input
-                                  }
-                                }}
-                                className="hidden"
-                              />
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="flex items-center space-x-1"
-                                onClick={() => fileInputRefs.current[paragraph.id - 1]?.click()}
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7" />
-                                  <line x1="16" x2="22" y1="5" y2="5" />
-                                  <line x1="19" x2="19" y1="2" y2="8" />
-                                  <circle cx="9" cy="9" r="2" />
-                                  <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-                                </svg>
-                                <span>Upload Asset</span>
-                              </Button>
+                              </div>
                             </div>
                           </div>
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
+                </div>}
 
-                {/* Step 3: Settings */}
-                <div className="border rounded-lg p-6">
+                {/* Step 3: Settings - Only shown after successful crawl */}
+                {crawlSuccessful && <div className="border rounded-lg p-6">
                   <div className="flex items-center mb-4">
-                    <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center mr-3 font-semibold">3</div>
+                    <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center mr-3 font-semibold dark:text-slate-900">3</div>
                     <h2 className="text-xl font-semibold">Step 3: Settings</h2>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Video Size</label>
-                      <Select>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select an option" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="16:9">16:9</SelectItem>
-                          <SelectItem value="9:16">9:16</SelectItem>
-                          <SelectItem value="1:1">1:1</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Voice</label>
-                      <Select>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select an option" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="male">Male</SelectItem>
-                          <SelectItem value="female">Female</SelectItem>
-                          <SelectItem value="neutral">Neutral</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Background Music</label>
-                      <Select>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select an option" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="upbeat">Upbeat</SelectItem>
-                          <SelectItem value="calm">Calm</SelectItem>
-                          <SelectItem value="dramatic">Dramatic</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Digital Human</label>
-                      <Select>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select an option" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="avatar1">Avatar 1</SelectItem>
-                          <SelectItem value="avatar2">Avatar 2</SelectItem>
-                          <SelectItem value="avatar3">Avatar 3</SelectItem>
-                        </SelectContent>
-                      </Select>
+                  <div>
+                    <div className="flex items-center overflow-x-auto pb-2 -mx-2 px-2">
+                      <div className="flex items-center gap-3 flex-nowrap">
+                        <Select defaultValue="avatar1">
+                          <SelectTrigger className="bg-gray-100 dark:bg-slate-800 border-0 rounded-full px-4 min-w-[180px] flex items-center h-10">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-gray-300 overflow-hidden flex items-center justify-center">
+                                <img src="/avatar1.png" alt="" className="w-full h-full object-cover" />
+                              </div>
+                              <SelectValue placeholder="Smart avatar" />
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="avatar1">Smart avatar</SelectItem>
+                            <SelectItem value="avatar2">Avatar 2</SelectItem>
+                            <SelectItem value="avatar3">Avatar 3</SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        <Select defaultValue="male">
+                          <SelectTrigger className="bg-gray-100 dark:bg-slate-800 border-0 rounded-full px-4 min-w-[180px] flex items-center h-10">
+                            <div className="flex items-center gap-2">
+                              <div className="w-5 h-5 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                  <line x1="12" x2="12" y1="19" y2="22"></line>
+                                </svg>
+                              </div>
+                              <SelectValue placeholder="Smart voice" />
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="male">Smart voice</SelectItem>
+                            <SelectItem value="female">Female</SelectItem>
+                            <SelectItem value="neutral">Neutral</SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        <Select defaultValue="9:16">
+                          <SelectTrigger className="bg-gray-100 dark:bg-slate-800 border-0 rounded-full px-4 min-w-[100px] flex items-center h-10">
+                            <SelectValue placeholder="9:16" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="16:9">16:9</SelectItem>
+                            <SelectItem value="9:16">9:16</SelectItem>
+                            <SelectItem value="1:1">1:1</SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        <Select defaultValue="english">
+                          <SelectTrigger className="bg-gray-100 dark:bg-slate-800 border-0 rounded-full px-4 min-w-[120px] flex items-center h-10">
+                            <SelectValue placeholder="Chinese" />
+                          </SelectTrigger>
+                          <SelectContent>
+                          <SelectItem value="chinese">Chinese</SelectItem>
+                            <SelectItem value="english">English</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   </div>
-                </div>
+                </div>}
 
-                {/* Generate Button */}
-                <div className="pt-4 flex justify-center">
+                {/* Generate Button - Only shown after successful crawl */}
+                {crawlSuccessful && <div className="pt-4 flex justify-center">
                   <Button onClick={handleGenerate} disabled={loading} className="w-full md:w-auto px-8">
-                    Submit Generate Task
+                    Submit Task
                   </Button>
-                </div>
+                </div>}
               </div>
             </div>
           </div>
         </div>
       </main>
+
+      {/* Assets Selection Dialog */}
+      <Dialog open={showAssetsDialog} onOpenChange={setShowAssetsDialog}>
+        <DialogContent className="sm:max-w-[900px] max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Select media</DialogTitle>
+          </DialogHeader>
+          <div className="flex justify-between items-center mb-4">
+            <div></div>
+            <div className="flex items-center">
+              <span className="mr-2 text-sm">Sort by</span>
+              <Button variant="outline" size="sm" className="flex items-center">
+                <span className="mr-1">Date</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {mockAssets.map((asset) => (
+              <div key={asset.id} className="relative group cursor-pointer" onClick={() => handleAssetSelect(asset)}>
+                <div className="absolute top-2 left-2 z-10">
+                  <div className="h-6 w-6 rounded-full bg-white/80 border border-gray-200 flex items-center justify-center">
+                    <div className="h-3 w-3 rounded-full"></div>
+                  </div>
+                </div>
+                <div className="relative aspect-square bg-slate-100 rounded-md overflow-hidden">
+                  {asset.type === 'video' && (
+                    <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
+                      {asset.duration}
+                    </div>
+                  )}
+                  <img src={asset.url} alt={asset.name} className="w-full h-full object-cover" />
+                </div>
+                <p className="text-xs mt-1 truncate">{asset.name}</p>
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter className="mt-6">
+            <Button variant="outline" onClick={() => setShowAssetsDialog(false)}>Cancel</Button>
+            <Button onClick={() => setShowAssetsDialog(false)}>Continue</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Asset Preview Modal */}
       {previewAsset && (
@@ -353,8 +505,10 @@ export default function GeneratePage() {
           <div className="relative max-w-4xl max-h-[80vh] w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
             {previewAsset.type === 'image' ? (
               <img src={previewAsset.url} alt="Preview" className="w-full h-full object-contain" />
-            ) : (
+            ) : previewAsset.type === 'video' ? (
               <video src={previewAsset.url} className="w-full h-full object-contain" controls autoPlay />
+            ) : (
+              <img src={previewAsset.url} alt="GIF Preview" className="w-full h-full object-contain" />
             )}
             <Button
               variant="ghost"
