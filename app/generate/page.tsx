@@ -377,7 +377,7 @@ export default function GeneratePage() {
                     <h2 className="text-xl font-semibold">Step 3: Settings</h2>
                   </div>
                   <div>
-                    <div className="flex items-center overflow-x-auto pb-2 -mx-2 px-2">
+                    <div className="flex items-center overflow-x-auto pt-2 pb-2 -mx-2 px-2">
                       <div className="flex items-center gap-3 flex-nowrap">
                         <Select defaultValue="avatar1">
                           <SelectTrigger className="bg-gray-100 dark:bg-slate-800 border-0 rounded-full px-4 min-w-[180px] flex items-center h-10">
@@ -385,11 +385,11 @@ export default function GeneratePage() {
                               <div className="w-6 h-6 rounded-full bg-gray-300 overflow-hidden flex items-center justify-center">
                                 <img src="/avatar1.png" alt="" className="w-full h-full object-cover" />
                               </div>
-                              <SelectValue placeholder="Smart avatar" />
+                              <SelectValue placeholder="Avatar" />
                             </div>
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="avatar1">Smart avatar</SelectItem>
+                            <SelectItem value="avatar1">Avatar 1</SelectItem>
                             <SelectItem value="avatar2">Avatar 2</SelectItem>
                             <SelectItem value="avatar3">Avatar 3</SelectItem>
                           </SelectContent>
@@ -405,13 +405,33 @@ export default function GeneratePage() {
                                   <line x1="12" x2="12" y1="19" y2="22"></line>
                                 </svg>
                               </div>
-                              <SelectValue placeholder="Smart voice" />
+                              <SelectValue placeholder="Voice" />
                             </div>
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="male">Smart voice</SelectItem>
+                            <SelectItem value="male">Male</SelectItem>
                             <SelectItem value="female">Female</SelectItem>
                             <SelectItem value="neutral">Neutral</SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        <Select defaultValue="bgm1">
+                          <SelectTrigger className="bg-gray-100 dark:bg-slate-800 border-0 rounded-full px-4 min-w-[180px] flex items-center h-10">
+                            <div className="flex items-center gap-2">
+                              <div className="w-5 h-5 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M9 18V5l12-2v13"></path>
+                                  <circle cx="6" cy="18" r="3"></circle>
+                                  <circle cx="18" cy="16" r="3"></circle>
+                                </svg>
+                              </div>
+                              <SelectValue placeholder="BGM" />
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="bgm1">BGM 1</SelectItem>
+                            <SelectItem value="bgm2">BGM 2</SelectItem>
+                            <SelectItem value="bgm3">BGM 3</SelectItem>
                           </SelectContent>
                         </Select>
 
@@ -426,7 +446,7 @@ export default function GeneratePage() {
                           </SelectContent>
                         </Select>
 
-                        <Select defaultValue="english">
+                        <Select defaultValue="chinese">
                           <SelectTrigger className="bg-gray-100 dark:bg-slate-800 border-0 rounded-full px-4 min-w-[120px] flex items-center h-10">
                             <SelectValue placeholder="Chinese" />
                           </SelectTrigger>
