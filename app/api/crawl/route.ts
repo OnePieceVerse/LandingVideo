@@ -59,7 +59,7 @@ export async function POST(request: Request) {
         content: `Content extracted from ${url} for scene 2. This would typically be a feature description or benefit statement from the landing page.`,
         assets: [
           { type: 'image', suffix: 'jpg', url: 'https://images.unsplash.com/photo-1531297484001-80022131f5a1?q=80&w=1000' },
-          { type: 'video', suffix: 'png', url: 'https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?q=80&w=1000' }
+          { type: 'video', suffix: 'jpeg', url: 'https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?q=80&w=1000' }
         ]
       },
       {

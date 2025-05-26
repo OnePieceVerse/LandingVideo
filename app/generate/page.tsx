@@ -26,28 +26,53 @@ export default function GeneratePage() {
     }
   ])
   const [showAssetsDialog, setShowAssetsDialog] = useState(false)
-  const [currentParagraphId, setCurrentParagraphId] = useState<number | null>(null)
+  const [currentSceneId, setCurrentSceneId] = useState<number | null>(null)
   const fileInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const [crawlSuccessful, setCrawlSuccessful] = useState(false)
   const [voiceOptions, setVoiceOptions] = useState<Array<{id: string, name: string}>>([])
   const [bgmOptions, setBgmOptions] = useState<Array<{id: string, name: string}>>([])
   const [transitionOptions, setTransitionOptions] = useState<Array<{id: string, name: string}>>([])
 
-  // Mock assets for the dialog
-  const mockAssets = [
-    { id: 1, type: 'image', url: 'https://via.placeholder.com/300x200', name: '穿越火线:枪战王者4529.jpg' },
-    { id: 2, type: 'image', url: 'https://via.placeholder.com/300x200', name: '穿越火线:枪战王者2089.jpg' },
-    { id: 3, type: 'image', url: 'https://via.placeholder.com/300x200', name: '穿越火线:枪战王者7327.jpeg' },
-    { id: 4, type: 'video', url: 'https://via.placeholder.com/300x200', name: 'MagStand Magnetic Phone Holder.mp4', duration: '01:16' },
-    { id: 5, type: 'video', url: 'https://via.placeholder.com/300x200', name: 'MagStand Magnetic Phone Holder.mp4', duration: '00:09' },
-    { id: 6, type: 'video', url: 'https://via.placeholder.com/300x200', name: 'MagStand Magnetic Phone Holder.mp4', duration: '00:10' },
-    { id: 7, type: 'image', url: 'https://via.placeholder.com/300x200', name: 'MagStand Magnetic Phone Holder.jpg' },
-    { id: 8, type: 'image', url: 'https://via.placeholder.com/300x200', name: 'MagStand Magnetic Phone Holder.jpg' },
-    { id: 9, type: 'image', url: 'https://via.placeholder.com/300x200', name: 'Product Image 1.jpg' },
-    { id: 10, type: 'image', url: 'https://via.placeholder.com/300x200', name: 'Product Image 2.jpg' },
-    { id: 11, type: 'image', url: 'https://via.placeholder.com/300x200', name: 'Product Image 3.jpg' },
-    { id: 12, type: 'image', url: 'https://via.placeholder.com/300x200', name: 'Product Image 4.jpg' }
-  ];
+  // Real assets from Supabase
+  const [userAssets, setUserAssets] = useState<Array<{
+    id: number;
+    type: 'image' | 'video' | 'gif';
+    url: string;
+  }>>([]);
+
+  // Load assets from Supabase
+  useEffect(() => {
+    const loadUserAssets = async () => {
+      try {
+        // Check if user is logged in
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (!user) {
+          return
+        }
+
+        // Fetch assets from the 'assets' table
+        const { data, error } = await supabase
+          .from('assets')
+          .select('id, type, url')
+          .eq('user_id', user.id)
+
+        if (error) {
+          console.error('Error loading assets:', error)
+          return
+        }
+
+        // Update assets state
+        if (data) {
+          setUserAssets(data);
+        }
+      } catch (error) {
+        console.error('Error in loadAssets:', error)
+      }
+    };
+
+    loadUserAssets();
+  }, [])
 
   const handleCrawl = async () => {
     // Check if user is logged in
@@ -91,7 +116,7 @@ export default function GeneratePage() {
         "Generating scene content..."
       ])
 
-      // If the API returns paragraph content, update the scenes state
+      // If the API returns scene content, update the scenes state
       if (data.scenes) {
         setScenes(data.scenes)
         setCrawlSuccessful(true)
@@ -113,7 +138,7 @@ export default function GeneratePage() {
     }, 2000)
   }
 
-  const updateParagraph = (id: number, content: string) => {
+  const updateScene = (id: number, content: string) => {
     setScenes(prev => prev.map(p => p.id === id ? { ...p, content } : p))
   }
 
@@ -123,14 +148,14 @@ export default function GeneratePage() {
     return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
   };
 
-  const handleFileUpload = async (paragraphId: number, fileType: 'image' | 'video' | 'gif', file: File) => {
+  const handleFileUpload = async (sceneId: number, fileType: 'image' | 'video' | 'gif', file: File) => {
     // Create a temporary URL for preview
     const url = URL.createObjectURL(file);
 
-    // Add the asset to the paragraph
+    // Add the asset to the scene
     setScenes(prevScenes => {
       return prevScenes.map(p => {
-        if (p.id === paragraphId) {
+        if (p.id === sceneId) {
           return {
             ...p,
             assets: [...p.assets, { type: fileType, suffix: getFileSuffix(file.name), url }]
@@ -143,10 +168,10 @@ export default function GeneratePage() {
 
   // Function to handle asset selection from the dialog
   const handleAssetSelect = (asset: any) => {
-    if (currentParagraphId) {
+    if (currentSceneId) {
       setScenes(prevScenes => {
         return prevScenes.map(p => {
-          if (p.id === currentParagraphId) {
+          if (p.id === currentSceneId) {
             return {
               ...p,
               assets: [...p.assets, { type: asset.type, suffix: getFileSuffix(asset.url), url: asset.url }]
@@ -389,15 +414,15 @@ export default function GeneratePage() {
                     <h2 className="text-xl font-semibold">Step 2: Edit Landing Page Content</h2>
                   </div>
                   <div className="space-y-6">
-                    {scenes.map((paragraph) => (
-                      <div key={paragraph.id} className="border rounded-lg overflow-hidden shadow-sm bg-white dark:bg-slate-900">
+                    {scenes.map((scene) => (
+                      <div key={scene.id} className="border rounded-lg overflow-hidden shadow-sm bg-white dark:bg-slate-900">
                         <div className="bg-muted/30 px-4 py-3 flex items-center justify-between border-b">
                           <div className="flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
                               <path d="m22 8-6 4 6 4V8Z"/>
                               <rect width="14" height="12" x="2" y="6" rx="2" ry="2"/>
                             </svg>
-                            <h3 className="font-medium">Scene {paragraph.id}</h3>
+                            <h3 className="font-medium">Scene {scene.id}</h3>
                           </div>
                           <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -423,9 +448,9 @@ export default function GeneratePage() {
                               </h4>
                             </div>
                             <Textarea
-                              placeholder={`Describe scene ${paragraph.id} here...`}
-                              value={paragraph.content}
-                              onChange={(e) => updateParagraph(paragraph.id, e.target.value)}
+                              placeholder={`Describe scene ${scene.id} here...`}
+                              value={scene.content}
+                              onChange={(e) => updateScene(scene.id, e.target.value)}
                               className="min-h-[150px] resize-none border-slate-200 dark:border-slate-700 focus-visible:ring-primary"
                             />
                           </div>
@@ -437,22 +462,22 @@ export default function GeneratePage() {
                                   <circle cx="9" cy="9" r="2"/>
                                   <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
                                 </svg>
-                                Assets ({paragraph.assets.length})
+                                Assets ({scene.assets.length})
                               </h4>
                             </div>
 
                             {/* Media preview section */}
                             <div className="border rounded-lg p-3 bg-slate-50 dark:bg-slate-800/50">
                               <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-6 gap-3 max-h-[220px] overflow-y-auto pb-1">
-                                {paragraph.assets.length > 0 ? (
-                                  paragraph.assets.map((asset, index) => (
+                                {scene.assets.length > 0 ? (
+                                  scene.assets.map((asset, index) => (
                                     <div
                                       key={index}
                                       className="aspect-square bg-white dark:bg-slate-700 rounded-md overflow-hidden relative group cursor-pointer shadow-sm border border-slate-200 dark:border-slate-600"
                                       onClick={() => setPreviewAsset(asset)}
                                     >
                                       {asset.type === 'image' ? (
-                                        <img src={asset.url} alt={`Scene ${paragraph.id} asset ${index}`} className="w-full h-full object-cover" />
+                                        <img src={asset.url} alt={`Scene ${scene.id} asset ${index}`} className="w-full h-full object-cover" />
                                       ) : (
                                         <video src={asset.url} className="w-full h-full object-cover" />
                                       )}
@@ -463,7 +488,7 @@ export default function GeneratePage() {
                                         onClick={(e) => {
                                           e.stopPropagation(); // Prevent opening preview when clicking delete
                                           setScenes(prev => prev.map(p => {
-                                            if (p.id === paragraph.id) {
+                                            if (p.id === scene.id) {
                                               return {
                                                 ...p,
                                                 assets: p.assets.filter((_, i) => i !== index)
@@ -522,12 +547,12 @@ export default function GeneratePage() {
                                   <input
                                     type="file"
                                     accept="image/*,video/*,gif/*"
-                                    ref={el => fileInputRefs.current[paragraph.id - 1] = el}
+                                    ref={el => fileInputRefs.current[scene.id - 1] = el}
                                     onChange={(e) => {
                                       if (e.target.files && e.target.files[0]) {
                                         const file = e.target.files[0];
                                         const fileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'gif';
-                                        handleFileUpload(paragraph.id, fileType, file);
+                                        handleFileUpload(scene.id, fileType, file);
                                         e.target.value = ''; // Reset the input
                                       }
                                     }}
@@ -553,7 +578,7 @@ export default function GeneratePage() {
                                     <PopoverContent className="w-54 p-0" align="start">
                                       <div className="py-2">
                                         <button
-                                          onClick={() => fileInputRefs.current[paragraph.id - 1]?.click()}
+                                          onClick={() => fileInputRefs.current[scene.id - 1]?.click()}
                                           className="flex items-center gap-3 w-full px-4 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                                         >
                                           <div className="flex items-center justify-center">
@@ -568,7 +593,7 @@ export default function GeneratePage() {
                                         <button
                                           className="flex items-center gap-3 w-full px-4 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                                           onClick={() => {
-                                            setCurrentParagraphId(paragraph.id);
+                                            setCurrentSceneId(scene.id);
                                             setShowAssetsDialog(true);
                                           }}
                                         >
@@ -754,7 +779,7 @@ export default function GeneratePage() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {mockAssets.map((asset) => (
+            {userAssets.map((asset) => (
               <div key={asset.id} className="relative group cursor-pointer" onClick={() => handleAssetSelect(asset)}>
                 <div className="absolute top-2 left-2 z-10">
                   <div className="h-6 w-6 rounded-full bg-white/80 border border-gray-200 flex items-center justify-center">
@@ -762,14 +787,9 @@ export default function GeneratePage() {
                   </div>
                 </div>
                 <div className="relative aspect-square bg-slate-100 rounded-md overflow-hidden">
-                  {asset.type === 'video' && (
-                    <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
-                      {asset.duration}
-                    </div>
-                  )}
-                  <img src={asset.url} alt={asset.name} className="w-full h-full object-cover" />
+                  <img src={asset.url} alt={asset.id.toString()} className="w-full h-full object-cover" />
                 </div>
-                <p className="text-xs mt-1 truncate">{asset.name}</p>
+                <p className="text-xs mt-1 truncate">{asset.id}</p>
               </div>
             ))}
           </div>
