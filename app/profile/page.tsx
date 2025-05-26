@@ -7,61 +7,37 @@ import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 
-const videos = [
-  {
-    id: 1,
-    title: "CFM strategy xxx",
-    date: new Date(),
-    thumbnail: "https://images.unsplash.com/photo-1611162617474-5b21e879e113?q=80&w=1000"
-  },
-  {
-    id: 2,
-    title: "CFM strategy yyy",
-    date: new Date(),
-    thumbnail: "https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?q=80&w=1000"
-  },
-  {
-    id: 3,
-    title: "CFM strategy zzz",
-    date: new Date(),
-    thumbnail: "https://images.unsplash.com/photo-1611162618071-b39a2ec055fb?q=80&w=1000"
-  }
-]
+// Define asset type interface based on Supabase 'assets' table structure
+interface Asset {
+  id: number;
+  user_id: string;
+  type: 'image' | 'video' | 'gif';
+  suffix: string;
+  url: string;
+  md5: string;
+  status: number;
+  create_time: string;
+  update_time: string;
+}
 
-const images = [
-  {
-    id: 1,
-    title: "Product Image 1",
-    date: new Date(),
-    thumbnail: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=1000"
-  },
-  {
-    id: 2,
-    title: "Product Image 2",
-    date: new Date(),
-    thumbnail: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?q=80&w=1000"
-  }
-]
-
-const gifs = [
-  {
-    id: 1,
-    title: "Gif 1",
-    date: new Date(),
-    thumbnail: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?q=80&w=1000"
-  },
-  {
-    id: 2,
-    title: "Gif 2",
-    date: new Date(),
-    thumbnail: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?q=80&w=1000"
-  }
-]
+// Define task interface based on Supabase 'task' table structure
+interface Task {
+  id: number;
+  user_id: string;
+  result_video_url: string;
+  status: number; // 0 - generating, 1 - done successfully, 2 - failed
+  create_time: string;
+  update_time: string;
+}
 
 export default function ProfilePage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [videos, setVideos] = useState<Asset[]>([]);
+  const [images, setImages] = useState<Asset[]>([]);
+  const [gifs, setGifs] = useState<Asset[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
 
   useEffect(() => {
     async function getUser() {
@@ -78,6 +54,10 @@ export default function ProfilePage() {
         }
 
         setUser(user)
+
+        // Fetch assets and tasks from Supabase after user is authenticated
+        await fetchAssets(user.id)
+        await fetchTasks(user.id)
       } catch (error) {
         console.error('Error getting user:', error)
         router.push("/login")
@@ -88,6 +68,55 @@ export default function ProfilePage() {
 
     getUser()
   }, [router])
+
+  // Fetch assets from Supabase and categorize by type
+  const fetchAssets = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('assets')
+        .select('*')
+        .eq('status', 1) // Only fetch assets with normal status
+        .order('create_time', { ascending: false })
+
+      if (error) {
+        throw error
+      }
+
+      if (data) {
+        // Categorize assets by type
+        const videoAssets = data.filter(asset => asset.type === 'video')
+        const imageAssets = data.filter(asset => asset.type === 'image')
+        const gifAssets = data.filter(asset => asset.type === 'gif')
+
+        setVideos(videoAssets)
+        setImages(imageAssets)
+        setGifs(gifAssets)
+      }
+    } catch (error) {
+      console.error('Error fetching assets:', error)
+    }
+  }
+
+  // Fetch tasks from Supabase
+  const fetchTasks = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('task')
+        .select('*')
+        .eq('user_id', userId)
+        .order('create_time', { ascending: false })
+
+      if (error) {
+        throw error
+      }
+
+      if (data) {
+        setTasks(data)
+      }
+    } catch (error) {
+      console.error('Error fetching tasks:', error)
+    }
+  }
 
   const handleSignOut = async () => {
     try {
@@ -134,14 +163,14 @@ export default function ProfilePage() {
               <div>
                 <h2 className="text-2xl font-bold tracking-tight">Works</h2>
                 <div className="grid gap-4 mt-4 grid-cols-2 md:grid-cols-4 lg:grid-cols-6">
-                  {videos.map((video) => (
+                  {tasks.map((video) => (
                     <div key={video.id} className="space-y-3">
                       <div className="overflow-hidden rounded-md">
                         <div className="aspect-video relative group cursor-pointer">
                           <img
-                            alt={video.title}
+                            alt={`Video ${video.id}`}
                             className="object-cover w-full h-full transition-transform group-hover:scale-105"
-                            src={video.thumbnail}
+                            src={video.result_video_url}
                           />
                           <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
                             <div className="rounded-full w-12 h-12 border-2 border-white flex items-center justify-center text-white">
@@ -151,9 +180,9 @@ export default function ProfilePage() {
                         </div>
                       </div>
                       <div>
-                        <h3 className="font-medium leading-none">{video.title}</h3>
+                        <h3 className="font-medium leading-none">Video {video.id}</h3>
                         <p className="text-sm text-muted-foreground">
-                          {format(video.date, "yyyy-MM-dd HH:mm:ss")}
+                          {format(new Date(video.create_time), "yyyy-MM-dd HH:mm:ss")}
                         </p>
                       </div>
                     </div>
@@ -176,16 +205,16 @@ export default function ProfilePage() {
                           <div className="overflow-hidden rounded-md">
                             <div className="aspect-video relative group cursor-pointer">
                               <img
-                                alt={image.title}
+                                alt={`Image ${image.id}`}
                                 className="object-cover w-full h-full transition-transform group-hover:scale-105"
-                                src={image.thumbnail}
+                                src={image.url}
                               />
                             </div>
                           </div>
                           <div>
-                            <h3 className="font-medium leading-none">{image.title}</h3>
+                            <h3 className="font-medium leading-none">Image {image.id}</h3>
                             <p className="text-sm text-muted-foreground">
-                              {format(image.date, "yyyy-MM-dd HH:mm:ss")}
+                              {format(new Date(image.create_time), "yyyy-MM-dd HH:mm:ss")}
                             </p>
                           </div>
                         </div>
@@ -194,26 +223,42 @@ export default function ProfilePage() {
                   </TabsContent>
                   <TabsContent value="videos">
                     <div className="grid gap-4 grid-cols-2 md:grid-cols-2 lg:grid-cols-6">
-                      {videos.map((video) => (
-                        <div key={video.id} className="space-y-3">
+                      {tasks.map((task) => (
+                        <div key={task.id} className="space-y-3">
                           <div className="overflow-hidden rounded-md">
                             <div className="aspect-video relative group cursor-pointer">
-                              <img
-                                alt={video.title}
-                                className="object-cover w-full h-full transition-transform group-hover:scale-105"
-                                src={video.thumbnail}
-                              />
-                              <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <div className="rounded-full w-12 h-12 border-2 border-white flex items-center justify-center text-white">
-                                  ▶
+                              {task.status === 1 && task.result_video_url ? (
+                                <img
+                                  alt={`Task ${task.id}`}
+                                  className="object-cover w-full h-full transition-transform group-hover:scale-105"
+                                  src={task.result_video_url}
+                                />
+                              ) : (
+                                <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                                  {task.status === 0 ? (
+                                    <div className="text-gray-500">Generating...</div>
+                                  ) : task.status === 2 ? (
+                                    <div className="text-red-500">Failed</div>
+                                  ) : (
+                                    <div className="text-gray-500">No Video</div>
+                                  )}
                                 </div>
-                              </div>
+                              )}
+                              {task.status === 1 && task.result_video_url && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <div className="rounded-full w-12 h-12 border-2 border-white flex items-center justify-center text-white">
+                                    ▶
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
                           <div>
-                            <h3 className="font-medium leading-none">{video.title}</h3>
+                            <h3 className="font-medium leading-none">
+                              {task.status === 0 ? "Generating" : task.status === 1 ? "Video" : "Failed"} {task.id}
+                            </h3>
                             <p className="text-sm text-muted-foreground">
-                              {format(video.date, "yyyy-MM-dd HH:mm:ss")}
+                              {format(new Date(task.create_time), "yyyy-MM-dd HH:mm:ss")}
                             </p>
                           </div>
                         </div>
@@ -222,14 +267,14 @@ export default function ProfilePage() {
                   </TabsContent>
                   <TabsContent value="gifs">
                     <div className="grid gap-4 grid-cols-2 md:grid-cols-2 lg:grid-cols-6">
-                      {gifs.slice(0, 2).map((gif) => (
+                      {gifs.map((gif) => (
                         <div key={gif.id} className="space-y-3">
                           <div className="overflow-hidden rounded-md">
                             <div className="aspect-video relative group cursor-pointer">
                               <img
-                                alt={gif.title}
+                                alt={`Gif ${gif.id}`}
                                 className="object-cover w-full h-full transition-transform group-hover:scale-105"
-                                src={gif.thumbnail}
+                                src={gif.url}
                               />
                               <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <div className="rounded-full w-12 h-12 border-2 border-white flex items-center justify-center text-white">
@@ -239,9 +284,9 @@ export default function ProfilePage() {
                             </div>
                           </div>
                           <div>
-                            <h3 className="font-medium leading-none">{gif.title}</h3>
+                            <h3 className="font-medium leading-none">Gif {gif.id}</h3>
                             <p className="text-sm text-muted-foreground">
-                              {format(gif.date, "yyyy-MM-dd HH:mm:ss")}
+                              {format(new Date(gif.create_time), "yyyy-MM-dd HH:mm:ss")}
                             </p>
                           </div>
                         </div>
