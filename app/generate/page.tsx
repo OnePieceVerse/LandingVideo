@@ -9,14 +9,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useState, useRef, useEffect } from "react"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
+import { Film, Heart } from "lucide-react"
 
 export default function GeneratePage() {
   const router = useRouter()
   const [url, setUrl] = useState("")
   const [logs, setLogs] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
-  const [previewAsset, setPreviewAsset] = useState<{type: 'image' | 'video' | 'gif', url: string} | null>(null)
-  const [paragraphs, setParagraphs] = useState<Array<{id: number, content: string, assets: Array<{type: 'image' | 'video' | 'gif', url: string}>}>>([
+  const [previewAsset, setPreviewAsset] = useState<{type: 'image' | 'video' | 'gif', suffix: string, url: string} | null>(null)
+  const [likedAssets, setLikedAssets] = useState<Set<string>>(new Set())
+  const [scenes, setScenes] = useState<Array<{id: number, content: string, assets: Array<{type: 'image' | 'video' | 'gif', suffix: string, url: string}>}>>([
     {
       id: 1,
       content: "",
@@ -27,6 +29,9 @@ export default function GeneratePage() {
   const [currentParagraphId, setCurrentParagraphId] = useState<number | null>(null)
   const fileInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const [crawlSuccessful, setCrawlSuccessful] = useState(false)
+  const [voiceOptions, setVoiceOptions] = useState<Array<{id: string, name: string}>>([])
+  const [bgmOptions, setBgmOptions] = useState<Array<{id: string, name: string}>>([])
+  const [transitionOptions, setTransitionOptions] = useState<Array<{id: string, name: string}>>([])
 
   // Mock assets for the dialog
   const mockAssets = [
@@ -86,9 +91,9 @@ export default function GeneratePage() {
         "Generating scene content..."
       ])
 
-      // If the API returns paragraph content, update the paragraphs state
-      if (data.paragraphs) {
-        setParagraphs(data.paragraphs)
+      // If the API returns paragraph content, update the scenes state
+      if (data.scenes) {
+        setScenes(data.scenes)
         setCrawlSuccessful(true)
       }
     } catch (error) {
@@ -109,20 +114,26 @@ export default function GeneratePage() {
   }
 
   const updateParagraph = (id: number, content: string) => {
-    setParagraphs(prev => prev.map(p => p.id === id ? { ...p, content } : p))
+    setScenes(prev => prev.map(p => p.id === id ? { ...p, content } : p))
   }
 
-  const handleFileUpload = async (paragraphId: number, fileType: 'image' | 'video', file: File) => {
+  // Helper function to get file extension/suffix from filename
+  const getFileSuffix = (filename: string): string => {
+    const parts = filename.split('.');
+    return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
+  };
+
+  const handleFileUpload = async (paragraphId: number, fileType: 'image' | 'video' | 'gif', file: File) => {
     // Create a temporary URL for preview
     const url = URL.createObjectURL(file);
 
     // Add the asset to the paragraph
-    setParagraphs(prevParagraphs => {
-      return prevParagraphs.map(p => {
+    setScenes(prevScenes => {
+      return prevScenes.map(p => {
         if (p.id === paragraphId) {
           return {
             ...p,
-            assets: [...p.assets, { type: fileType, url }]
+            assets: [...p.assets, { type: fileType, suffix: getFileSuffix(file.name), url }]
           };
         }
         return p;
@@ -133,12 +144,12 @@ export default function GeneratePage() {
   // Function to handle asset selection from the dialog
   const handleAssetSelect = (asset: any) => {
     if (currentParagraphId) {
-      setParagraphs(prevParagraphs => {
-        return prevParagraphs.map(p => {
+      setScenes(prevScenes => {
+        return prevScenes.map(p => {
           if (p.id === currentParagraphId) {
             return {
               ...p,
-              assets: [...p.assets, { type: asset.type, url: asset.url }]
+              assets: [...p.assets, { type: asset.type, suffix: getFileSuffix(asset.url), url: asset.url }]
             };
           }
           return p;
@@ -147,6 +158,203 @@ export default function GeneratePage() {
     }
     setShowAssetsDialog(false);
   };
+
+  // Function to generate a simple hash from a string
+  const generateHash = (str: string): string => {
+    let hash = 0;
+    if (str.length === 0) return hash.toString(32);
+
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+
+    // Convert to hex string and ensure it's positive
+    return (hash >>> 0).toString(32);
+  };
+
+  // Function to handle liking an asset
+  const handleLikeAsset = async (asset: { type: 'image' | 'video' | 'gif', suffix: string, url: string }, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent opening preview when clicking like button
+
+    try {
+      // Check if user is logged in
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (!user) {
+        // Redirect to login page if not logged in
+        router.push('/login')
+        return
+      }
+
+      // Generate hash of the asset URL
+      const md5Hash = generateHash(asset.url);
+
+      const assetId = `${asset.type}-${asset.url}`;
+
+      // Toggle like status in local state
+      const newLikedAssets = new Set(likedAssets);
+      if (newLikedAssets.has(assetId)) {
+        newLikedAssets.delete(assetId);
+      } else {
+        newLikedAssets.add(assetId);
+      }
+      setLikedAssets(newLikedAssets);
+
+      // Save to Supabase
+      if (newLikedAssets.has(assetId)) {
+        // Insert into assets table
+        const { error } = await supabase
+          .from('assets')
+          .insert([
+            {
+              user_id: user.id,
+              type: asset.type,
+              suffix: asset.suffix,
+              url: asset.url,
+              md5: md5Hash
+            }
+          ]);
+
+        if (error) {
+          console.error('Error saving liked asset:', error);
+          // Revert local state if save fails
+          newLikedAssets.delete(assetId);
+          setLikedAssets(newLikedAssets);
+        }
+      } else {
+        // Remove from assets table
+        const { error } = await supabase
+          .from('assets')
+          .delete()
+          .match({
+            user_id: user.id,
+            url: asset.url
+          });
+
+        if (error) {
+          console.error('Error removing liked asset:', error);
+          // Revert local state if delete fails
+          newLikedAssets.add(assetId);
+          setLikedAssets(newLikedAssets);
+        }
+      }
+    } catch (error) {
+      console.error('Error handling like:', error);
+    }
+  };
+
+  // Load liked assets from Supabase on component mount
+  useEffect(() => {
+    const loadLikedAssets = async () => {
+      try {
+        // Check if user is logged in
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (!user) {
+          return
+        }
+
+        // Fetch liked assets for the current user
+        const { data, error } = await supabase
+          .from('assets')
+          .select('*')
+          .eq('user_id', user.id)
+
+        if (error) {
+          console.error('Error loading liked assets:', error)
+          return
+        }
+
+        // Update local state with liked assets
+        if (data) {
+          const likedSet = new Set<string>();
+          data.forEach(item => {
+            // Create a unique identifier for each asset
+            likedSet.add(`${item.type}-${item.url}`);
+          });
+          setLikedAssets(likedSet);
+        }
+      } catch (error) {
+        console.error('Error in loadLikedAssets:', error)
+      }
+    }
+
+    loadLikedAssets()
+  }, [])
+
+  // Fetch options from Supabase tables
+  useEffect(() => {
+    // Default options if tables don't exist or are empty
+    const defaultVoiceOptions = [
+      { id: '1', name: 'Male' },
+      { id: '2', name: 'Female' },
+      { id: '3', name: 'Neutral' }
+    ]
+
+    const defaultBgmOptions = [
+      { id: '1', name: 'BGM 1' },
+      { id: '2', name: 'BGM 2' },
+      { id: '3', name: 'BGM 3' }
+    ]
+
+    const defaultTransitionOptions = [
+      { id: '1', name: 'MoveLeft' },
+      { id: '2', name: 'MoveRight' }
+    ]
+
+    // Generic function to fetch options from any table
+    const fetchOptions = async (
+      tableName: string,
+      setOptions: React.Dispatch<React.SetStateAction<Array<{id: string, name: string}>>>,
+      defaultOptions: Array<{id: string, name: string}>
+    ) => {
+      try {
+        // Try to get data from the table
+        const { data, error } = await supabase
+          .from(tableName)
+          .select('id, name')
+          .eq('status', '1')
+
+        // If there's data, use it
+        if (data && data.length > 0) {
+          setOptions(data)
+          return
+        }
+
+        // If no data but table exists, try to insert default values
+        if (!error && data && data.length === 0) {
+          const { error: insertError } = await supabase
+            .from(tableName)
+            .upsert(defaultOptions, { onConflict: 'id' })
+
+          // If insertion successful, fetch the data again
+          if (!insertError) {
+            const { data: refetchData } = await supabase
+              .from(tableName)
+              .select('id, name')
+
+            if (refetchData && refetchData.length > 0) {
+              setOptions(refetchData)
+              return
+            }
+          }
+        }
+
+        // Default fallback for any error case
+        setOptions(defaultOptions)
+      } catch (error) {
+        // Fallback to defaults on any exception
+        setOptions(defaultOptions)
+      }
+    }
+
+    // Fetch all option types
+    fetchOptions('voice', setVoiceOptions, defaultVoiceOptions)
+    fetchOptions('bgm', setBgmOptions, defaultBgmOptions)
+    fetchOptions('transition', setTransitionOptions, defaultTransitionOptions)
+  }, []);
 
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)] flex-col">
@@ -181,7 +389,7 @@ export default function GeneratePage() {
                     <h2 className="text-xl font-semibold">Step 2: Edit Landing Page Content</h2>
                   </div>
                   <div className="space-y-6">
-                    {paragraphs.map((paragraph) => (
+                    {scenes.map((paragraph) => (
                       <div key={paragraph.id} className="border rounded-lg overflow-hidden shadow-sm bg-white dark:bg-slate-900">
                         <div className="bg-muted/30 px-4 py-3 flex items-center justify-between border-b">
                           <div className="flex items-center gap-2">
@@ -249,11 +457,12 @@ export default function GeneratePage() {
                                         <video src={asset.url} className="w-full h-full object-cover" />
                                       )}
                                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-200"></div>
+                                      {/* Delete button */}
                                       <div
                                         className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity z-10"
                                         onClick={(e) => {
                                           e.stopPropagation(); // Prevent opening preview when clicking delete
-                                          setParagraphs(prev => prev.map(p => {
+                                          setScenes(prev => prev.map(p => {
                                             if (p.id === paragraph.id) {
                                               return {
                                                 ...p,
@@ -273,6 +482,21 @@ export default function GeneratePage() {
                                             <path d="M18 6 6 18"></path>
                                             <path d="m6 6 12 12"></path>
                                           </svg>
+                                        </Button>
+                                      </div>
+                                      {/* Like button */}
+                                      <div
+                                        className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                        onClick={(e) => handleLikeAsset(asset, e)}
+                                      >
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6 rounded-full bg-black/60 text-white hover:text-white hover:bg-red-500/90"
+                                        >
+                                          <Heart
+                                            className={`h-3 w-3 ${likedAssets.has(`${asset.type}-${asset.url}`) ? 'fill-red-500 text-red-500' : 'fill-none'}`}
+                                          />
                                         </Button>
                                       </div>
                                     </div>
@@ -297,12 +521,12 @@ export default function GeneratePage() {
                                 <div className="flex space-x-2">
                                   <input
                                     type="file"
-                                    accept="image/*,video/*"
+                                    accept="image/*,video/*,gif/*"
                                     ref={el => fileInputRefs.current[paragraph.id - 1] = el}
                                     onChange={(e) => {
                                       if (e.target.files && e.target.files[0]) {
                                         const file = e.target.files[0];
-                                        const fileType = file.type.startsWith('image/') ? 'image' : 'video';
+                                        const fileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'gif';
                                         handleFileUpload(paragraph.id, fileType, file);
                                         e.target.value = ''; // Reset the input
                                       }
@@ -379,7 +603,18 @@ export default function GeneratePage() {
                   <div>
                     <div className="flex items-center overflow-x-auto pt-2 pb-2 -mx-2 px-2">
                       <div className="flex items-center gap-3 flex-nowrap">
-                        <Select defaultValue="avatar1">
+                      <Select defaultValue="2">
+                          <SelectTrigger className="bg-gray-100 dark:bg-slate-800 border-0 rounded-full px-4 min-w-[100px] flex items-center h-10">
+                            <SelectValue placeholder="9:16" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1">16:9</SelectItem>
+                            <SelectItem value="2">9:16</SelectItem>
+                            <SelectItem value="3">1:1</SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        {/* <Select defaultValue="avatar1">
                           <SelectTrigger className="bg-gray-100 dark:bg-slate-800 border-0 rounded-full px-4 min-w-[180px] flex items-center h-10">
                             <div className="flex items-center gap-2">
                               <div className="w-6 h-6 rounded-full bg-gray-300 overflow-hidden flex items-center justify-center">
@@ -393,9 +628,10 @@ export default function GeneratePage() {
                             <SelectItem value="avatar2">Avatar 2</SelectItem>
                             <SelectItem value="avatar3">Avatar 3</SelectItem>
                           </SelectContent>
-                        </Select>
+                        </Select> */}
 
-                        <Select defaultValue="male">
+                        {/* Voice */}
+                        <Select defaultValue={voiceOptions.length > 0 ? voiceOptions[0].id : ""}>
                           <SelectTrigger className="bg-gray-100 dark:bg-slate-800 border-0 rounded-full px-4 min-w-[180px] flex items-center h-10">
                             <div className="flex items-center gap-2">
                               <div className="w-5 h-5 flex items-center justify-center">
@@ -409,13 +645,20 @@ export default function GeneratePage() {
                             </div>
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="male">Male</SelectItem>
-                            <SelectItem value="female">Female</SelectItem>
-                            <SelectItem value="neutral">Neutral</SelectItem>
+                            {voiceOptions.length > 0 ? (
+                              voiceOptions.map((voice) => (
+                                <SelectItem key={voice.id} value={voice.id}>
+                                  {voice.name}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="loading" disabled>Loading voices...</SelectItem>
+                            )}
                           </SelectContent>
                         </Select>
 
-                        <Select defaultValue="bgm1">
+                        {/* BGM */}
+                        <Select defaultValue={bgmOptions.length > 0 ? bgmOptions[0].id : ""}>
                           <SelectTrigger className="bg-gray-100 dark:bg-slate-800 border-0 rounded-full px-4 min-w-[180px] flex items-center h-10">
                             <div className="flex items-center gap-2">
                               <div className="w-5 h-5 flex items-center justify-center">
@@ -429,30 +672,49 @@ export default function GeneratePage() {
                             </div>
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="bgm1">BGM 1</SelectItem>
-                            <SelectItem value="bgm2">BGM 2</SelectItem>
-                            <SelectItem value="bgm3">BGM 3</SelectItem>
+                            {bgmOptions.length > 0 ? (
+                              bgmOptions.map((bgm) => (
+                                <SelectItem key={bgm.id} value={bgm.id}>
+                                  {bgm.name}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="loading" disabled>Loading BGMs...</SelectItem>
+                            )}
                           </SelectContent>
                         </Select>
 
-                        <Select defaultValue="9:16">
-                          <SelectTrigger className="bg-gray-100 dark:bg-slate-800 border-0 rounded-full px-4 min-w-[100px] flex items-center h-10">
-                            <SelectValue placeholder="9:16" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="16:9">16:9</SelectItem>
-                            <SelectItem value="9:16">9:16</SelectItem>
-                            <SelectItem value="1:1">1:1</SelectItem>
-                          </SelectContent>
-                        </Select>
-
-                        <Select defaultValue="chinese">
+                        {/* Transition */}
+                        <Select defaultValue={transitionOptions.length > 0 ? transitionOptions[0].id : ""}>
                           <SelectTrigger className="bg-gray-100 dark:bg-slate-800 border-0 rounded-full px-4 min-w-[120px] flex items-center h-10">
-                            <SelectValue placeholder="Chinese" />
+                            <div className="flex items-center gap-2">
+                              <div className="w-5 h-5 flex items-center justify-center">
+                                <Film size={16} />
+                              </div>
+                            </div>
+                            <SelectValue placeholder="Transition" />
                           </SelectTrigger>
                           <SelectContent>
-                          <SelectItem value="chinese">Chinese</SelectItem>
-                            <SelectItem value="english">English</SelectItem>
+                            {transitionOptions.length > 0 ? (
+                              transitionOptions.map((transition) => (
+                                <SelectItem key={transition.id} value={transition.id}>
+                                  {transition.name}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="loading" disabled>Loading transitions...</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+
+                        {/* Enhance Assets */}
+                        <Select defaultValue="2">
+                          <SelectTrigger className="bg-gray-100 dark:bg-slate-800 border-0 rounded-full px-4 min-w-[120px] flex items-center h-10">
+                            <SelectValue placeholder="Enhance" />
+                          </SelectTrigger>
+                          <SelectContent>
+                          <SelectItem value="1">Enhance Assets</SelectItem>
+                            <SelectItem value="2">No Enhance Assets</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
