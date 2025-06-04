@@ -10,6 +10,7 @@ import { useState, useRef, useEffect } from "react"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
 import { Film, Heart } from "lucide-react"
+import Image from "next/image"
 
 export default function GeneratePage() {
   const router = useRouter()
@@ -476,10 +477,19 @@ export default function GeneratePage() {
                                       className="aspect-square bg-white dark:bg-slate-700 rounded-md overflow-hidden relative group cursor-pointer shadow-sm border border-slate-200 dark:border-slate-600"
                                       onClick={() => setPreviewAsset(asset)}
                                     >
-                                      {asset.type === 'image' ? (
-                                        <img src={asset.url} alt={`Scene ${scene.id} asset ${index}`} className="w-full h-full object-cover" />
+                                      {asset.type === 'video' ? (
+                                        <video
+                                          src={asset.url}
+                                          className="w-full h-full object-cover"
+                                          muted
+                                        />
                                       ) : (
-                                        <video src={asset.url} className="w-full h-full object-cover" />
+                                        <Image
+                                          src={asset.url}
+                                          alt={`Scene ${scene.id} asset ${index}`}
+                                          className="object-cover"
+                                          fill
+                                        />
                                       )}
                                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-200"></div>
                                       {/* Delete button */}
@@ -787,7 +797,20 @@ export default function GeneratePage() {
                   </div>
                 </div>
                 <div className="relative aspect-square bg-slate-100 rounded-md overflow-hidden">
-                  <img src={asset.url} alt={asset.id.toString()} className="w-full h-full object-cover" />
+                  {asset.type === 'video' ? (
+                    <video
+                      src={asset.url}
+                      className="w-full h-full object-cover"
+                      muted
+                    />
+                  ) : (
+                    <Image
+                      src={asset.url}
+                      alt={asset.id.toString()}
+                      className="object-cover"
+                      fill
+                    />
+                  )}
                 </div>
                 <p className="text-xs mt-1 truncate">{asset.id}</p>
               </div>
@@ -804,13 +827,27 @@ export default function GeneratePage() {
       {/* Asset Preview Modal */}
       {previewAsset && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" onClick={() => setPreviewAsset(null)}>
-          <div className="relative max-w-4xl max-h-[80vh] w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="relative w-full h-full max-w-4xl max-h-[80vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
             {previewAsset.type === 'image' ? (
-              <img src={previewAsset.url} alt="Preview" className="w-full h-full object-contain" />
+              <Image
+                src={previewAsset.url}
+                alt="Preview"
+                className="max-w-full max-h-full object-contain"
+                width={800}
+                height={600}
+                style={{ width: 'auto', height: 'auto' }}
+              />
             ) : previewAsset.type === 'video' ? (
-              <video src={previewAsset.url} className="w-full h-full object-contain" controls autoPlay />
+              <video src={previewAsset.url} className="max-w-full max-h-full object-contain" controls autoPlay />
             ) : (
-              <img src={previewAsset.url} alt="GIF Preview" className="w-full h-full object-contain" />
+              <Image
+                src={previewAsset.url}
+                alt="GIF Preview"
+                className="max-w-full max-h-full object-contain"
+                width={800}
+                height={600}
+                style={{ width: 'auto', height: 'auto' }}
+              />
             )}
             <Button
               variant="ghost"

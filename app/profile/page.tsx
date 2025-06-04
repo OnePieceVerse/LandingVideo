@@ -6,6 +6,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
+import Image from "next/image"
 
 // Define asset type interface based on Supabase 'assets' table structure
 interface Asset {
@@ -167,10 +168,11 @@ export default function ProfilePage() {
                     <div key={video.id} className="space-y-3">
                       <div className="overflow-hidden rounded-md">
                         <div className="aspect-video relative group cursor-pointer">
-                          <img
+                          <Image
                             alt={`Video ${video.id}`}
-                            className="object-cover w-full h-full transition-transform group-hover:scale-105"
+                            className="object-cover transition-transform group-hover:scale-105"
                             src={video.result_video_url}
+                            fill
                           />
                           <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
                             <div className="rounded-full w-12 h-12 border-2 border-white flex items-center justify-center text-white">
@@ -204,10 +206,11 @@ export default function ProfilePage() {
                         <div key={image.id} className="space-y-3">
                           <div className="overflow-hidden rounded-md">
                             <div className="aspect-video relative group cursor-pointer">
-                              <img
+                              <Image
                                 alt={`Image ${image.id}`}
-                                className="object-cover w-full h-full transition-transform group-hover:scale-105"
+                                className="object-cover transition-transform group-hover:scale-105"
                                 src={image.url}
+                                fill
                               />
                             </div>
                           </div>
@@ -223,42 +226,23 @@ export default function ProfilePage() {
                   </TabsContent>
                   <TabsContent value="videos">
                     <div className="grid gap-4 grid-cols-2 md:grid-cols-2 lg:grid-cols-6">
-                      {tasks.map((task) => (
-                        <div key={task.id} className="space-y-3">
+                      {videos.map((video) => (
+                        <div key={video.id} className="space-y-3">
                           <div className="overflow-hidden rounded-md">
                             <div className="aspect-video relative group cursor-pointer">
-                              {task.status === 1 && task.result_video_url ? (
-                                <img
-                                  alt={`Task ${task.id}`}
-                                  className="object-cover w-full h-full transition-transform group-hover:scale-105"
-                                  src={task.result_video_url}
-                                />
-                              ) : (
-                                <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                                  {task.status === 0 ? (
-                                    <div className="text-gray-500">Generating...</div>
-                                  ) : task.status === 2 ? (
-                                    <div className="text-red-500">Failed</div>
-                                  ) : (
-                                    <div className="text-gray-500">No Video</div>
-                                  )}
-                                </div>
-                              )}
-                              {task.status === 1 && task.result_video_url && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <div className="rounded-full w-12 h-12 border-2 border-white flex items-center justify-center text-white">
-                                    ▶
-                                  </div>
-                                </div>
-                              )}
+                              <video
+                                className="object-cover transition-transform group-hover:scale-105"
+                                src={video.url}
+                                autoPlay
+                                muted
+                                loop
+                              />
                             </div>
                           </div>
                           <div>
-                            <h3 className="font-medium leading-none">
-                              {task.status === 0 ? "Generating" : task.status === 1 ? "Video" : "Failed"} {task.id}
-                            </h3>
+                            <h3 className="font-medium leading-none">Video {video.id}</h3>
                             <p className="text-sm text-muted-foreground">
-                              {format(new Date(task.create_time), "yyyy-MM-dd HH:mm:ss")}
+                              {format(new Date(video.create_time), "yyyy-MM-dd HH:mm:ss")}
                             </p>
                           </div>
                         </div>
@@ -271,10 +255,11 @@ export default function ProfilePage() {
                         <div key={gif.id} className="space-y-3">
                           <div className="overflow-hidden rounded-md">
                             <div className="aspect-video relative group cursor-pointer">
-                              <img
+                              <Image
                                 alt={`Gif ${gif.id}`}
-                                className="object-cover w-full h-full transition-transform group-hover:scale-105"
+                                className="object-cover transition-transform group-hover:scale-105"
                                 src={gif.url}
+                                fill
                               />
                               <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <div className="rounded-full w-12 h-12 border-2 border-white flex items-center justify-center text-white">
