@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { useState, useRef, useEffect } from "react"
 import { supabase } from "@/lib/supabase"
+import { uploadFileToCOS, getFileType, getFileExtension } from "@/lib/cos"
 import { useRouter } from "next/navigation"
 import { Film, Heart } from "lucide-react"
 import Image from "next/image"
@@ -17,9 +18,9 @@ export default function GeneratePage() {
   const [url, setUrl] = useState("")
   const [logs, setLogs] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
-  const [previewAsset, setPreviewAsset] = useState<{type: 'image' | 'video' | 'gif', suffix: string, url: string} | null>(null)
+  const [previewAsset, setPreviewAsset] = useState<{type: 'image' | 'video' | 'gif', suffix: string, url: string, uploading?: boolean} | null>(null)
   const [likedAssets, setLikedAssets] = useState<Set<string>>(new Set())
-  const [scenes, setScenes] = useState<Array<{id: number, content: string, assets: Array<{type: 'image' | 'video' | 'gif', suffix: string, url: string}>}>>([
+  const [scenes, setScenes] = useState<Array<{id: number, content: string, assets: Array<{type: 'image' | 'video' | 'gif', suffix: string, url: string, uploading?: boolean}>}>>([
     {
       id: 1,
       content: "",
@@ -140,31 +141,80 @@ export default function GeneratePage() {
   }
 
   const updateScene = (id: number, content: string) => {
-    setScenes(prev => prev.map(p => p.id === id ? { ...p, content } : p))
+    setScenes(prev => prev.map(s => s.id === id ? { ...s, content } : s))
   }
 
-  // Helper function to get file extension/suffix from filename
-  const getFileSuffix = (filename: string): string => {
-    const parts = filename.split('.');
-    return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
-  };
-
   const handleFileUpload = async (sceneId: number, fileType: 'image' | 'video' | 'gif', file: File) => {
-    // Create a temporary URL for preview
-    const url = URL.createObjectURL(file);
+    try {
+      // Show loading state by adding a temporary placeholder
+      const tempAsset = {
+        type: fileType,
+        suffix: getFileExtension(file.name),
+        url: 'uploading', // Temporary placeholder
+        uploading: true
+      };
 
-    // Add the asset to the scene
-    setScenes(prevScenes => {
-      return prevScenes.map(p => {
-        if (p.id === sceneId) {
-          return {
-            ...p,
-            assets: [...p.assets, { type: fileType, suffix: getFileSuffix(file.name), url }]
-          };
-        }
-        return p;
+      // Add temporary asset to show loading state
+      setScenes(prevScenes => {
+        return prevScenes.map(p => {
+          if (p.id === sceneId) {
+            return {
+              ...p,
+              assets: [...p.assets, tempAsset]
+            };
+          }
+          return p;
+        });
       });
-    });
+
+      // Upload file to Tencent COS
+      const cosFileUrl = await uploadFileToCOS(file);
+
+      // Update the scene with the actual COS URL
+      setScenes(prevScenes => {
+        return prevScenes.map(p => {
+          if (p.id === sceneId) {
+            // Replace the temporary asset with the actual one
+            const updatedAssets = p.assets.map(asset => {
+              if (asset.url === 'uploading' && asset.uploading) {
+                return {
+                  type: fileType,
+                  suffix: getFileExtension(file.name),
+                  url: cosFileUrl
+                };
+              }
+              return asset;
+            });
+            return {
+              ...p,
+              assets: updatedAssets
+            };
+          }
+          return p;
+        });
+      });
+
+      console.log('File uploaded successfully to COS:', cosFileUrl);
+
+    } catch (error) {
+      console.error('Error uploading file to COS:', error);
+
+      // Remove the temporary asset on error
+      setScenes(prevScenes => {
+        return prevScenes.map(p => {
+          if (p.id === sceneId) {
+            return {
+              ...p,
+              assets: p.assets.filter(asset => !(asset.url === 'uploading' && asset.uploading))
+            };
+          }
+          return p;
+        });
+      });
+
+      // Show error to user (you might want to add a proper error toast here)
+      alert('Failed to upload file. Please try again.');
+    }
   };
 
   // Function to handle asset selection from the dialog
@@ -175,7 +225,7 @@ export default function GeneratePage() {
           if (p.id === currentSceneId) {
             return {
               ...p,
-              assets: [...p.assets, { type: asset.type, suffix: getFileSuffix(asset.url), url: asset.url }]
+              assets: [...p.assets, { type: asset.type, suffix: getFileExtension(asset.url), url: asset.url }]
             };
           }
           return p;
@@ -475,9 +525,13 @@ export default function GeneratePage() {
                                     <div
                                       key={index}
                                       className="aspect-square bg-white dark:bg-slate-700 rounded-md overflow-hidden relative group cursor-pointer shadow-sm border border-slate-200 dark:border-slate-600"
-                                      onClick={() => setPreviewAsset(asset)}
+                                      onClick={() => !asset.uploading && setPreviewAsset(asset)}
                                     >
-                                      {asset.type === 'video' ? (
+                                      {asset.uploading ? (
+                                        <div className="w-full h-full flex items-center justify-center bg-slate-100 dark:bg-slate-600">
+                                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                                        </div>
+                                      ) : asset.type === 'video' ? (
                                         <video
                                           src={asset.url}
                                           className="w-full h-full object-cover"
@@ -493,47 +547,51 @@ export default function GeneratePage() {
                                       )}
                                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-200"></div>
                                       {/* Delete button */}
-                                      <div
-                                        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                                        onClick={(e) => {
-                                          e.stopPropagation(); // Prevent opening preview when clicking delete
-                                          setScenes(prev => prev.map(p => {
-                                            if (p.id === scene.id) {
-                                              return {
-                                                ...p,
-                                                assets: p.assets.filter((_, i) => i !== index)
+                                      {!asset.uploading && (
+                                        <div
+                                          className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                          onClick={(e) => {
+                                            e.stopPropagation(); // Prevent opening preview when clicking delete
+                                            setScenes(prev => prev.map(p => {
+                                              if (p.id === scene.id) {
+                                                return {
+                                                  ...p,
+                                                  assets: p.assets.filter((_, i) => i !== index)
+                                                }
                                               }
-                                            }
-                                            return p
-                                          }));
-                                        }}
-                                      >
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-6 w-6 rounded-full bg-black/60 text-white hover:text-white hover:bg-red-500/90"
+                                              return p
+                                            }));
+                                          }}
                                         >
-                                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
-                                            <path d="M18 6 6 18"></path>
-                                            <path d="m6 6 12 12"></path>
-                                          </svg>
-                                        </Button>
-                                      </div>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-6 w-6 rounded-full bg-black/60 text-white hover:text-white hover:bg-red-500/90"
+                                          >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
+                                              <path d="M18 6 6 18"></path>
+                                              <path d="m6 6 12 12"></path>
+                                            </svg>
+                                          </Button>
+                                        </div>
+                                      )}
                                       {/* Like button */}
-                                      <div
-                                        className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                                        onClick={(e) => handleLikeAsset(asset, e)}
-                                      >
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-6 w-6 rounded-full bg-black/60 text-white hover:text-white hover:bg-red-500/90"
+                                      {!asset.uploading && (
+                                        <div
+                                          className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                          onClick={(e) => handleLikeAsset(asset, e)}
                                         >
-                                          <Heart
-                                            className={`h-3 w-3 ${likedAssets.has(`${asset.type}-${asset.url}`) ? 'fill-red-500 text-red-500' : 'fill-none'}`}
-                                          />
-                                        </Button>
-                                      </div>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-6 w-6 rounded-full bg-black/60 text-white hover:text-white hover:bg-red-500/90"
+                                          >
+                                            <Heart
+                                              className={`h-3 w-3 ${likedAssets.has(`${asset.type}-${asset.url}`) ? 'fill-red-500 text-red-500' : 'fill-none'}`}
+                                            />
+                                          </Button>
+                                        </div>
+                                      )}
                                     </div>
                                   ))
                                 ) : (
