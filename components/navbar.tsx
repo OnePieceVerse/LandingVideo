@@ -1,44 +1,48 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
-import { Camera, User, Video } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabase"
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { Camera, User, Video } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 export function Navbar() {
-  const pathname = usePathname()
-  const router = useRouter()
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const pathname = usePathname();
+  const router = useRouter();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     // Check authentication status when component mounts
     async function checkAuth() {
-      const { data: { user } } = await supabase.auth.getUser()
-      setIsLoggedIn(!!user)
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      setIsLoggedIn(!!user);
     }
 
-    checkAuth()
+    checkAuth();
 
     // Set up auth state change listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setIsLoggedIn(!!session?.user)
-    })
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      setIsLoggedIn(!!session?.user);
+    });
 
     return () => {
-      subscription.unsubscribe()
-    }
-  }, [])
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const handleProfileClick = (e: React.MouseEvent) => {
     if (!isLoggedIn) {
-      e.preventDefault()
-      router.push('/login')
+      e.preventDefault();
+      router.push("/login");
     }
     // If logged in, the Link will work normally and navigate to /profile
-  }
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -57,25 +61,23 @@ export function Navbar() {
                   variant={pathname === "/" ? "default" : "ghost"}
                   asChild
                 >
-                  <Link href="/">
-                    Home
-                  </Link>
+                  <Link href="/">Home</Link>
                 </Button>
                 <Button
                   variant={pathname === "/generate" ? "default" : "ghost"}
                   asChild
                 >
-                  <Link href="/generate">
-                    Generate
-                  </Link>
+                  <Link href="/generate">Generate</Link>
                 </Button>
                 <Button
                   variant={pathname === "/profile" ? "default" : "ghost"}
                   asChild
                 >
                   <Link href="/profile" onClick={handleProfileClick}>
-                    <User className={`${isLoggedIn ? 'text-green-500 ' : ''}mr-2 h-4 w-4`} />
-                    Profile {isLoggedIn ? '✓' : ''}
+                    <User
+                      className={`${isLoggedIn ? "text-green-500 " : ""}mr-2 h-4 w-4`}
+                    />
+                    Profile {isLoggedIn ? "✓" : ""}
                   </Link>
                 </Button>
               </nav>
@@ -84,5 +86,5 @@ export function Navbar() {
         </div>
       </div>
     </header>
-  )
+  );
 }

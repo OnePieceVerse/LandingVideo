@@ -17,32 +17,57 @@ export async function POST(request: Request) {
     }
 
     // Forward the request to the third-party service
-    // const apiResponse = await fetch('https://api.landingvideo.com/v1/crawl', {
-    //   method: 'POST',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //     'Authorization': `Bearer ${process.env.LANDINGVIDEO_API_KEY || ''}`, // Using server environment variable for API key
-    //   },
-    //   body: JSON.stringify({ url }),
-    // });
+  //   const apiResponse = await fetch('http://localhost:8008/api/v1/text/urlCrawl', {
+  //     method: 'POST',
+  //     headers: {
+  //       'Content-Type': 'application/json',
+  //       // 'Authorization': `Bearer ${process.env.LANDINGVIDEO_API_KEY || ''}`, // Using server environment variable for API key
+  //     },
+  //     body: JSON.stringify({ url }),
+  //   });
 
-    // if (!apiResponse.ok) {
-    //   throw new Error(`Third-party API error: ${apiResponse.status}`);
-    // }
+  //   if (!apiResponse.ok) {
+  //     throw new Error(`Third-party API error: ${apiResponse.status}`);
+  //   }
 
-    // const apiData = await apiResponse.json();
+  //   const apiData = await apiResponse.json();
 
-    // // If we have real data from the API, use it
-    // if (apiData && apiData.scenes) {
-    //   // TODO:generate asset type and suffix
-    //   // Return the API response
-    //   return NextResponse.json({
-    //     success: true,
-    //     message: 'Landing page crawled successfully',
-    //     url,
-    //     scenes: apiData.scenes,
-    //   });
-    // }
+  //   // If we have real data from the API, use it
+  //   if (apiData && apiData.code === 200 && apiData.data) {
+  //     // generate asset type and suffix
+  //     let id = 0;
+  //     const scenes = apiData.data.map((scene: any) => {
+  //       id++;
+  //       return {
+  //         id: id,
+  //         content: scene.content,
+  //         assets: scene.materials.map((material: string) => {  // scene.materials is list of string, each string is a url
+  //           const suffix = getAssetSuffix(material);
+  //           const type = getAssetType(suffix);
+  //           return {
+  //             type: type,
+  //             suffix: suffix,
+  //             url: material,
+  //           };
+  //         }),
+  //       };
+  //     });
+
+  //     // Return the API response
+  //     return NextResponse.json({
+  //       success: true,
+  //       message: 'Landing page crawled successfully',
+  //       url,
+  //       scenes: scenes,
+  //     });
+  //   }
+  //   else {
+  //     return NextResponse.json({ error: 'Failed to crawl URL' }, { status: 400 });
+  //   }
+  // } catch (error) {
+  //   console.error('Error crawling URL:', error);
+  //   return NextResponse.json({ error: 'Failed to crawl URL' }, { status: 500 });
+  // }
 
     // Fallback to mock data if the API doesn't return scenes
     const mockscenes = [
@@ -89,4 +114,21 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
+
+};
+
+const getAssetSuffix = (filename: string): string => {
+  return filename.slice(((filename.lastIndexOf('.') - 1) >>> 0) + 2);
+};
+
+const getAssetType = (suffix: string): string => {
+  if (suffix.startsWith('gif')) {
+    return 'gif';
+  } else if (suffix.startsWith('jpg') || suffix.startsWith('jpeg') || suffix.startsWith('png')) {
+    return 'image';
+  } else if (suffix.startsWith('mp4') || suffix.startsWith('wav')) {
+    return 'video';
+  } else {
+    return 'image'; // default fallback
+  }
+};
