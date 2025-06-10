@@ -45,7 +45,7 @@ export async function POST(request: Request) {
         id++;
         return {
           id: id,
-          content: scene.content,
+          content: scene.text,
           assets: scene.materials.length > 0 ? scene.materials.map((material: string) => {  // scene.materials is list of string, each string is a url
             const suffix = getAssetSuffix(material);
             const type = getAssetType(suffix);
