@@ -35,7 +35,11 @@ export async function POST(request: Request) {
       throw new Error(`Third-party API error: ${apiResponse.status}`);
     }
 
+    console.log("apiResponse", apiResponse);
+
     const apiData = await apiResponse.json();
+
+    console.log("apiData", apiData);
 
     // If we have real data from the API, use it
     if (apiData && apiData.code === 200 && apiData.data) {
@@ -43,10 +47,14 @@ export async function POST(request: Request) {
       let id = 0;
       const scenes = apiData.data.map((scene: any) => {
         id++;
+
+        console.log("scene", scene);
+        console.log("scene.materials", scene.materials);
+
         return {
           id: id,
           content: scene.content,
-          assets: scene.materials.map((material: string) => {  // scene.materials is list of string, each string is a url
+          assets: scene.materials.length > 0 ? scene.materials.map((material: string) => {  // scene.materials is list of string, each string is a url
             const suffix = getAssetSuffix(material);
             const type = getAssetType(suffix);
             return {
@@ -54,7 +62,7 @@ export async function POST(request: Request) {
               suffix: suffix,
               url: material,
             };
-          }),
+          }) : [],
         };
       });
 
