@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { API_CONFIG, fetchWithTimeout } from '@/lib/config';
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,10 +45,6 @@ export async function POST(request: NextRequest) {
     // 3. Queue the video generation job
     // 4. Call external video generation service
 
-    // For now, we'll simulate calling a remote service
-    // Replace this with your actual video generation service endpoint
-    const REMOTE_SERVICE_URL = "http://localhost:8088/v1/api/task/submit_task";
-
     // Prepare payload for remote service
     const remotePayload = {
       user_id: userId,
@@ -67,51 +64,60 @@ export async function POST(request: NextRequest) {
       }
     };
 
-    // // request to real service
-    // const remoteResponse = await fetch(REMOTE_SERVICE_URL, {
-    //   method: "POST",
-    //   headers: {
-    //     "Content-Type": "application/json",
-    //     // "Authorization": `Bearer ${process.env.VIDEO_SERVICE_API_KEY}`,
-    //   },
-    //   body: JSON.stringify(remotePayload),
-    // });
+    try {
+      // 使用真实服务时，取消下面的注释并注释掉mock部分
+      // const remoteResponse = await fetchWithTimeout(
+      //   API_CONFIG.ENDPOINTS.VIDEO_SERVICE,
+      //   {
+      //     method: "POST",
+      //     headers: {
+      //       "Content-Type": "application/json",
+      //       // "Authorization": `Bearer ${process.env.VIDEO_SERVICE_API_KEY}`,
+      //     },
+      //     body: JSON.stringify(remotePayload),
+      //   },
+      //   API_CONFIG.TIMEOUTS.SUBMIT_TASK_TIMEOUT
+      // );
 
-    // if (!remoteResponse.ok) {
-    //   throw new Error(`Remote service error: ${remoteResponse.status}`);
-    // }
+      // if (!remoteResponse.ok) {
+      //   throw new Error(`Remote service error: ${remoteResponse.status}`);
+      // }
 
-    // const remoteResult = await remoteResponse.json();
-    // if (!remoteResult || !remoteResult.code || !remoteResult.data) {
-    //   return NextResponse.json(
-    //     { success: false, error: "Remote service error" },
-    //     { status: 400 }
-    //   );
-    // }
-    // if (remoteResult.code !== 200) {
-    //   return NextResponse.json(
-    //     { success: false, error: remoteResult.msg },
-    //     { status: 400 }
-    //   );
-    // }
+      // const remoteResult = await remoteResponse.json();
+      // if (!remoteResult || !remoteResult.code || !remoteResult.data) {
+      //   return NextResponse.json(
+      //     { success: false, error: "Remote service error" },
+      //     { status: 400 }
+      //   );
+      // }
+      // if (remoteResult.code !== 200) {
+      //   return NextResponse.json(
+      //     { success: false, error: remoteResult.msg },
+      //     { status: 400 }
+      //   );
+      // }
 
-    // const taskId = remoteResult.data.task_id;
+      // const taskId = remoteResult.data.task_id;
 
+      // mock response（当使用真实服务时删除这部分）
+      const mockResponse = {
+        code: 200,
+        msg: "success",
+        data: {
+          task_id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        }
+      };
 
-    // mock response
-    const mockResponse = {
-      code: 200,
-      msg: "success",
-      data: {
-        task_id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      }
-    };
+      return NextResponse.json({
+        success: true,
+        taskId: mockResponse.data.task_id,
+        message: "Your video generation request has been submitted and is being processed."
+      });
 
-    return NextResponse.json({
-      success: true,
-      taskId: mockResponse.data.task_id,
-      message: "Your video generation request has been submitted and is being processed."
-    });
+        } catch (fetchError) {
+      // fetchWithTimeout 会自动处理超时错误
+      throw fetchError;
+    }
 
   } catch (error) {
     console.error("Video generation API error:", error);
