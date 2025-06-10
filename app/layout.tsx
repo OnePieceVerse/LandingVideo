@@ -3,11 +3,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Navbar } from "@/components/navbar";
+import { Toaster } from "@/components/ui/toaster";
+
 export const metadata: Metadata = {
   title: "LandingVideo - Transform Landing Pages to Videos",
   description:
     "Transform any landing page into captivating short videos for social media",
 };
+
 export default function RootLayout({
   children,
 }: {
@@ -153,6 +156,7 @@ export default function RootLayout({
               </div>
             </footer>
           </div>
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

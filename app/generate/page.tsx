@@ -28,9 +28,11 @@ import { uploadFileToCOS, getFileType, getFileExtension } from "@/lib/cos";
 import { useRouter } from "next/navigation";
 import { Film, Heart } from "lucide-react";
 import Image from "next/image";
+import { useToast } from "@/hooks/use-toast";
 
 export default function GeneratePage() {
   const router = useRouter();
+  const { toast } = useToast();
   const [url, setUrl] = useState("");
   const [logs, setLogs] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -72,6 +74,25 @@ export default function GeneratePage() {
   const [transitionOptions, setTransitionOptions] = useState<
     Array<{ id: string; name: string }>
   >([]);
+
+  // Video settings state
+  const [videoRatio, setVideoRatio] = useState(""); // 9:16 by default
+  const [selectedVoice, setSelectedVoice] = useState("");
+  const [selectedBgm, setSelectedBgm] = useState("");
+  const [selectedTransition, setSelectedTransition] = useState("");
+  const [enhanceAssets, setEnhanceAssets] = useState("2"); // No enhance by default
+
+  // Task name dialog state
+  const [showTaskNameDialog, setShowTaskNameDialog] = useState(false);
+  const [taskName, setTaskName] = useState("");
+
+  // Centered notification state
+  const [showCenteredNotification, setShowCenteredNotification] = useState(false);
+  const [centeredNotification, setCenteredNotification] = useState<{
+    title: string;
+    description: string;
+    type: "success" | "error";
+  } | null>(null);
 
   // Real assets from Supabase
   const [userAssets, setUserAssets] = useState<
@@ -132,13 +153,20 @@ export default function GeneratePage() {
 
     // Validate URL
     if (!url.trim()) {
-      setLogs(["Error: Please enter a valid URL"]);
+      toast({
+        title: "Error",
+        description: "Please enter a valid URL",
+        variant: "destructive",
+      });
       return;
     }
 
     // Proceed with crawling if logged in
     setLoading(true);
-    setLogs(["Crawling landing page content..."]);
+    toast({
+      title: "Crawling Started",
+      description: "Analyzing landing page content...",
+    });
 
     try {
       // Make API call to local API route instead of third-party service
@@ -156,12 +184,11 @@ export default function GeneratePage() {
 
       const data = await response.json();
 
-      // Update logs with response from backend
-      setLogs((prev) => [
-        ...prev,
-        "Crawl successful",
-        "Generating scene content...",
-      ]);
+      // Show success notification
+      toast({
+        title: "Crawl Successful",
+        description: "Landing page content extracted and scenes generated",
+      });
 
       // If the API returns scene content, update the scenes state
       if (data.scenes) {
@@ -170,26 +197,145 @@ export default function GeneratePage() {
       }
     } catch (error) {
       console.error("Crawl error:", error);
-      setLogs((prev) => [
-        ...prev,
-        `Error: ${error instanceof Error ? error.message : "Failed to crawl URL"}`,
-      ]);
+      toast({
+        title: "Crawl Failed",
+        description: error instanceof Error ? error.message : "Failed to crawl URL",
+        variant: "destructive",
+      });
       setCrawlSuccessful(false);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
+    // Check if user is logged in
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      // Redirect to login page if not logged in
+      router.push("/login");
+      return;
+    }
+
+    // Validate that we have scenes with content
+    if (!scenes.some(scene => scene.content.trim())) {
+      toast({
+        title: "Invalid Scenes",
+        description: "Please add content to at least one scene",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Show task name dialog
+    setShowTaskNameDialog(true);
+  };
+
+  const handleSubmitTask = async () => {
+    if (!taskName.trim()) {
+      toast({
+        title: "Missing Task Name",
+        description: "Please enter a task name",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Close dialog and proceed with task submission
+    setShowTaskNameDialog(false);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      // Redirect to login page if not logged in
+      router.push("/login");
+      return;
+    }
+
     setLoading(true);
-    setLogs((prev) => [
-      ...prev,
-      "generating video...",
-      "video generated successfully: https://example.com/video.mp4",
-    ]);
-    setTimeout(() => {
+    toast({
+      title: "Preparing Video Generation",
+      description: "Setting up your video generation request...",
+    });
+
+    try {
+      // Collect video scenes data
+      const videoScenes = scenes.map(scene => ({
+        id: scene.id,
+        content: scene.content,
+        assets: scene.assets.map(asset => ({
+          type: asset.type,
+          url: asset.url,
+          suffix: asset.suffix
+        }))
+      }));
+
+      // Collect video settings
+      const videoSettings = {
+        videoRatio: videoRatio,
+        voice: selectedVoice,
+        bgm: selectedBgm,
+        transition: selectedTransition,
+        enhanceAssets: enhanceAssets === "1" // true if "Enhance Assets", false if "No Enhance Assets"
+      };
+
+      // Prepare request payload
+      const requestPayload = {
+        url: url,
+        scenes: videoScenes,
+        settings: videoSettings,
+        userId: user.id,
+        taskName: taskName.trim()
+      };
+
+      toast({
+        title: "Submitting Request",
+        description: "Sending your video generation request...",
+      });
+
+      // Send request to remote video generation API
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestPayload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      // Show success or error notification
+      if (result.success) {
+        showCenteredNotificationDialog(
+          "Submitting Task Success",
+          `Task ID is: ${result.taskId}, please check the task status in your profile page.`,
+          "success"
+        );
+      } else {
+        throw new Error(result.error || "Video generation failed");
+      }
+
+    } catch (error) {
+      console.error("Video generation error:", error);
+      showCenteredNotificationDialog(
+        "Submit Task Failed",
+        error instanceof Error ? error.message : "Failed to submit task",
+        "error"
+      );
+    } finally {
       setLoading(false);
-    }, 2000);
+      // Reset task name for next use
+      setTaskName("");
+    }
   };
 
   const updateScene = (id: number, content: string) => {
@@ -251,6 +397,12 @@ export default function GeneratePage() {
       });
 
       console.log("File uploaded successfully to COS:", cosFileUrl);
+
+      // Show success notification
+      toast({
+        title: "Upload Successful",
+        description: "File uploaded successfully",
+      });
     } catch (error) {
       console.error("Error uploading file to COS:", error);
 
@@ -269,8 +421,12 @@ export default function GeneratePage() {
         });
       });
 
-      // Show error to user (you might want to add a proper error toast here)
-      alert("Failed to upload file. Please try again.");
+      // Show error to user
+      toast({
+        title: "Upload Failed",
+        description: "Failed to upload file. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -501,6 +657,31 @@ export default function GeneratePage() {
     fetchOptions("transition", setTransitionOptions, defaultTransitionOptions);
   }, []);
 
+  // Set default values when options are loaded
+  useEffect(() => {
+    if (voiceOptions.length > 0 && !selectedVoice) {
+      setSelectedVoice(voiceOptions[0].id);
+    }
+  }, [voiceOptions, selectedVoice]);
+
+  useEffect(() => {
+    if (bgmOptions.length > 0 && !selectedBgm) {
+      setSelectedBgm(bgmOptions[0].id);
+    }
+  }, [bgmOptions, selectedBgm]);
+
+  useEffect(() => {
+    if (transitionOptions.length > 0 && !selectedTransition) {
+      setSelectedTransition(transitionOptions[0].id);
+    }
+  }, [transitionOptions, selectedTransition]);
+
+  // Helper function to show centered notification
+  const showCenteredNotificationDialog = (title: string, description: string, type: "success" | "error") => {
+    setCenteredNotification({ title, description, type });
+    setShowCenteredNotification(true);
+  };
+
   return (
     <div
       className="flex min-h-[calc(100vh-3.5rem)] flex-col"
@@ -542,6 +723,8 @@ export default function GeneratePage() {
                     </Button>
                   </div>
                 </div>
+
+
 
                 {/* Step 2: Landing Page Content - Only shown after successful crawl */}
                 {crawlSuccessful && (
@@ -1192,7 +1375,7 @@ export default function GeneratePage() {
                           className="flex items-center gap-3 flex-nowrap"
                           data-oid="1-iocrx"
                         >
-                          <Select defaultValue="2" data-oid="ff3_::3">
+                          <Select value={videoRatio} onValueChange={setVideoRatio} data-oid="ff3_::3">
                             <SelectTrigger
                               className="bg-gray-100 dark:bg-slate-800 border-0 rounded-full px-4 min-w-[100px] flex items-center h-10"
                               data-oid="1g9esnt"
@@ -1233,9 +1416,8 @@ export default function GeneratePage() {
 
                           {/* Voice */}
                           <Select
-                            defaultValue={
-                              voiceOptions.length > 0 ? voiceOptions[0].id : ""
-                            }
+                            value={selectedVoice}
+                            onValueChange={setSelectedVoice}
                             data-oid="6.oipzw"
                           >
                             <SelectTrigger
@@ -1310,9 +1492,8 @@ export default function GeneratePage() {
 
                           {/* BGM */}
                           <Select
-                            defaultValue={
-                              bgmOptions.length > 0 ? bgmOptions[0].id : ""
-                            }
+                            value={selectedBgm}
+                            onValueChange={setSelectedBgm}
                             data-oid="_flm.8s"
                           >
                             <SelectTrigger
@@ -1388,11 +1569,8 @@ export default function GeneratePage() {
 
                           {/* Transition */}
                           <Select
-                            defaultValue={
-                              transitionOptions.length > 0
-                                ? transitionOptions[0].id
-                                : ""
-                            }
+                            value={selectedTransition}
+                            onValueChange={setSelectedTransition}
                             data-oid="gtpqo74"
                           >
                             <SelectTrigger
@@ -1439,7 +1617,7 @@ export default function GeneratePage() {
                           </Select>
 
                           {/* Enhance Assets */}
-                          <Select defaultValue="2" data-oid="y3cwef4">
+                          <Select value={enhanceAssets} onValueChange={setEnhanceAssets} data-oid="y3cwef4">
                             <SelectTrigger
                               className="bg-gray-100 dark:bg-slate-800 border-0 rounded-full px-4 min-w-[120px] flex items-center h-10"
                               data-oid="zv4fydh"
@@ -1599,6 +1777,112 @@ export default function GeneratePage() {
               data-oid="v2q:umo"
             >
               Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Task Name Dialog */}
+      <Dialog
+        open={showTaskNameDialog}
+        onOpenChange={setShowTaskNameDialog}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Enter Task Name</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              value={taskName}
+              onChange={(e) => setTaskName(e.target.value)}
+              placeholder="Enter a name for this video generation task"
+              className="w-full"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleSubmitTask();
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowTaskNameDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmitTask}
+              disabled={!taskName.trim()}
+            >
+              Submit Task
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Centered Notification Dialog */}
+      <Dialog
+        open={showCenteredNotification}
+        onOpenChange={setShowCenteredNotification}
+      >
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className={`flex items-center gap-2 ${
+              centeredNotification?.type === "success" ? "text-green-600" : "text-red-600"
+            }`}>
+              {centeredNotification?.type === "success" ? (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-6 w-6"
+                >
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                  <polyline points="22,4 12,14.01 9,11.01"></polyline>
+                </svg>
+              ) : (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-6 w-6"
+                >
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="15" x2="9" y1="9" y2="15"></line>
+                  <line x1="9" x2="15" y1="9" y2="15"></line>
+                </svg>
+              )}
+              {centeredNotification?.title}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-muted-foreground">
+              {centeredNotification?.description}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => setShowCenteredNotification(false)}
+              className={
+                centeredNotification?.type === "success"
+                  ? "bg-green-600 hover:bg-green-700"
+                  : "bg-red-600 hover:bg-red-700"
+              }
+            >
+              OK
             </Button>
           </DialogFooter>
         </DialogContent>
